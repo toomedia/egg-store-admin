@@ -14,45 +14,51 @@ export default function page() {
     const handleLogin = async () => {
         setIsLoading(true);
         setIsError(null);
-      
+      const userData = localStorage.getItem('userData');
+      if(userData){
+        router.push('/');
+        return;
+    }else{
         try {
-          const { data, error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,
-          });
-      
-          if (error) {
+        });
+    
+        if (error) {
             console.error(error);
             setIsError(error.message);
             return; // exit early if login failed
-          }
-      
-          // Login successful, now check admin flag
-          const { data: userData, error: userError } = await supabase
+        }
+    
+        // Login successful, now check admin flag
+        const { data: userData, error: userError } = await supabase
             .from('users')
             .select('*')
             .eq('email', email)
             .eq('isAdmin', true)
             .single();
-      
-          if (userError || !userData) {
+    
+        if (userError || !userData) {
             console.error(userError || 'User is not admin');
             setIsError(userError || 'User is not admin');
             return;
-          }
-      
-          // User is admin — you can redirect or show dashboard here
-          console.log('Admin logged in:', userData);
-          setIsError(null);
-          router.push('/dashboard');
+        }
+    
+        // User is admin — you can redirect or show dashboard here
+        console.log('Admin logged in:', userData);
+        setIsError(null);
+        router.push('/dashboard');
+        localStorage.setItem('userData', JSON.stringify(userData));
 
         } catch (error) {
-          console.error(error);
-          setIsError(error.message);
+        console.error(error);
+        setIsError(error.message);
         } finally {
-          setIsLoading(false);
+        setIsLoading(false);
         }
-      };
+    }
+};
       
 
   return ( 
