@@ -4,13 +4,21 @@ import {supabase} from "../../../utils/supabaseClient"
 import {ArrowLeft } from "lucide-react"
 
 const page = () => {
-  const [currentView, setCurrentView] = useState<'list' | 'create'>('create');
+  const [currentView, setCurrentView] = useState<'list' | 'create'>('list');
   const [preset, setPreset] = useState([])
   const categories = ['Nature', 'Abstract', 'Easter', 'Animals', 'Holiday'];
 
   // Form state
-  const [formData, setFormData] = useState({titleEn: '', titleDe: '', descEn: '', descDe: '', category: '', filters: [] as string[], size: '', price: '', images: [] as File[] });
-  const sizes = ['24', '75', '96', '120', '2 / for test'];
+  const [formData, setFormData] = useState({titleEn: '', titleDe: '', descEn: '', descDe: '', category: '', filters: [] as string[], size: { label: '', value: '' }, price: '', images: [] as File[] });
+  const sizes = [
+    { label: 'sm', value: 12 },
+    { label: 'xs', value: 1 },
+    { label: 'md', value: 18 },
+    { label: 'lg', value: 27 },
+    { label: 'xl', value: 32 },
+    { label: 'xxl', value: 38 },
+  ];
+  
   const filters = ['Floral', 'Geometric', 'Minimalist', 'Colorful', 'Vintage'];
 
   useEffect(()=>{
@@ -26,7 +34,7 @@ const page = () => {
 
   }
   fetchPreset()
-  },[currentView, location.href])
+  },[currentView])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     console.log("formData", formData.images);
@@ -72,7 +80,7 @@ const page = () => {
       return;
     }
   
-    if(formData.images.length !== parseInt(formData.size)) {
+    if(formData.images.length !== parseInt(formData.size.value)) {
       alert("Please upload the correct number of images for the selected size.");
       return;
     }
@@ -122,7 +130,7 @@ const page = () => {
           },
           category: formData.category,
           filters: formData.filters,
-          preset_size: formData.size,
+          preset_size_json: formData.size,
           preset_price: formData.price,
           preset_images: uploadedImageUrls, 
         })
@@ -241,10 +249,28 @@ const page = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="size" className="block text-sm font-medium text-gray-700 mb-1">Preset Size</label>
-                  <select  onChange={handleInputChange} id="size" name="size" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                  <select
+                    name="size"
+                    onChange={(e) => {
+                      const selectedValue = e.target.value; // ye value hoga number as string, e.g. "32"
+                      const selectedSize = sizes.find(s => s.value.toString() === selectedValue);
+                      if(selectedSize) {
+                        setFormData(prev => ({
+                          ...prev,
+                          size: selectedSize
+                        }));
+                      }
+                    }}
+                  >
                     <option value="">Select a size</option>
-                    {sizes.map((size) => (<option key={size} value={size}>{size} cards</option>))}
+                    {sizes.map(({ label, value }) => (
+                      <option key={label} value={value}>
+                        {label} ({value} cards)
+                      </option>
+                    ))}
                   </select>
+
+
                 </div>
                 <div>
                   <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">Price (€)</label>
@@ -255,7 +281,7 @@ const page = () => {
               <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Upload Images</label>
                   <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md" 
-                    onClick={()=>{if(!formData.size){alert("Please select a size first"); return}}}
+                    onClick={()=>{if(!formData.size.value){alert("Please select a size first"); return}}}
                   >
                     <div className="space-y-1 text-center">
                       <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
@@ -395,7 +421,10 @@ const page = () => {
                         <div className="bg-gray-100 px-3 py-2 rounded-lg text-center">
                           <p className="text-xs text-gray-500">Preset Size</p>
                           <p className="text-xl font-bold text-gray-800">
-                            {item.preset_size || 'N/A'}
+                            {item.preset_size_json?.label || 'N/A'}
+                          </p>
+                          <p className="text-xl font-bold text-gray-800">
+                            {item.preset_size_json?.value || 'N/A'}
                           </p>
                         </div>
                       </div>
