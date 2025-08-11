@@ -1,10 +1,420 @@
-import React from 'react'
+"use client"
+import React, { useEffect, useState } from 'react';
+import {supabase} from "../../../utils/supabaseClient"
+import {ArrowLeft } from "lucide-react"
 
 const page = () => {
+  const [currentView, setCurrentView] = useState<'list' | 'create'>('list');
+  const [preset, setPreset] = useState([])
+  const categories = ['Nature', 'Abstract', 'Easter', 'Animals', 'Holiday'];
+
+  // Form state
+  const [formData, setFormData] = useState({titleEn: '', titleDe: '', descEn: '', descDe: '', category: '', filters: [] as string[], size: '', price: '', images: [] as File[] });
+  const sizes = ['24', '75', '96', '120'];
+  const filters = ['Floral', 'Geometric', 'Minimalist', 'Colorful', 'Vintage'];
+
+  useEffect(()=>{
+    const fetchPreset = async () =>{
+      const { data, error } = await supabase
+    .from('presets')
+    .select('*');
+
+    if(error){console.log("error", error); return}
+    console.log("data", data);
+
+    setPreset(data)
+
+  }
+  fetchPreset()
+  },[currentView, location.href])
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, type } = e.target;
+  
+    if (type === "file") {
+      const files = (e.target as HTMLInputElement).files;
+      if (!files) return;
+      setFormData((prev) => ({
+        ...prev,
+        [name]: Array.from(files), 
+      }));
+    } else {
+      const { value } = e.target;
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+  };
+  
+
+  const handleFilterToggle = (filter: string) => {
+    setFormData(prev => ({
+      ...prev,
+      filters: prev.filters.includes(filter)
+        ? prev.filters.filter(f => f !== filter)
+        : [...prev.filters, filter]
+    }));
+  };
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+  
+    if (formData.images.length === 0) {
+      alert("Please upload at least one image.");
+      return;
+    }
+  
+    try {
+      const uploadedImageUrls: string[] = [];
+
+      for (let image of formData.images) {
+        console.log("🚀 ~ handleSubmit ~ formData.images:", formData.images)
+
+        const fileExt = image.name.split(".").pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `presets/${fileName}`;
+  
+        let { error: uploadError } = await supabase.storage
+          .from("presets")
+          .upload(filePath, image);
+          console.log("🚀 ~ handleSubmit ~ image:", image)
+          console.log("🚀 ~ handleSubmit ~ filePath:", filePath)
+  
+        if (uploadError) {
+          console.error("Image upload error:", uploadError);
+          return;
+        }
+  
+        // 2️⃣ Get public URL
+        const { data: publicUrlData } = supabase.storage
+          .from("presets")
+          .getPublicUrl(filePath);
+  
+        uploadedImageUrls.push(publicUrlData.publicUrl);
+      }
+  
+      // 3️⃣ Save preset in table with image URLs
+      const { data, error } = await supabase
+        .from("presets")
+        .insert({
+          preset_name: {
+            en_name: formData.titleEn,
+            de_name: formData.titleDe,
+          },
+          preset_desc: {
+            en_desc: formData.descEn,
+            de_desc: formData.descDe,
+          },
+          category: formData.category,
+          filters: formData.filters,
+          preset_size: formData.size,
+          preset_price: formData.price,
+          preset_images: uploadedImageUrls, 
+        })
+        .select("*")
+        .single();
+  
+      if (error) {
+        console.error("Preset save error:", error);
+        return;
+      }
+  
+      console.log("Preset created:", data);
+      alert("Preset created successfully!");
+      setCurrentView("list");
+  
+    } catch (err) {
+      console.error("Unexpected error:", err);
+    }
+  };
+  
+
+  if (currentView === 'create') {
+    return (
+      <div className="container mx-auto px-4 py-8 font-manrope">
+        <div onClick={()=> setCurrentView('list')}>
+          <ArrowLeft/>
+        </div>
+
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-800">Create New Preset</h1>
+          <p className="text-gray-600">Fill out the form below to create a new egg card preset.</p>
+        </div>
+
+        <form className="space-y-6" onSubmit={handleSubmit}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label htmlFor="title-en" className="block text-sm font-medium text-gray-700 mb-1">Title (English)</label>
+                  <input required onChange={handleInputChange} type="text" id="title-en" name="titleEn" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Spring Flowers Collection" />
+                </div>
+                <div>
+                  <label htmlFor="title-de" className="block text-sm font-medium text-gray-700 mb-1">Title (German)</label>
+                  <input required  onChange={handleInputChange} type="text" id="title-de" name="titleDe" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Frühlingsblumen Kollektion" />
+                </div>
+              </div>
+          
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label htmlFor="desc-en" className="block text-sm font-medium text-gray-700 mb-1">Description (English)</label>
+                  <textarea required onChange={handleInputChange} id="desc-en" name="descEn" rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="A beautiful collection of spring flower designs for your egg memory game."></textarea>
+                </div>
+                <div>
+                  <label htmlFor="desc-de" className="block text-sm font-medium text-gray-700 mb-1">Description (German)</label>
+                  <textarea required onChange={handleInputChange} id="desc-de" name="descDe" rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Eine wunderschöne Kollektion von Frühlingsblumen-Designs für Ihr Eier-Memory-Spiel."></textarea>
+                </div>
+              </div>
+          
+              <div>
+                <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select onChange={handleInputChange} id="category" name="category" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                  <option value="">Select a category</option>
+                  {categories.map((category) => (<option key={category} value={category}>{category}</option>))}
+                </select>
+                <div className="mt-2">
+                  <button type="button" className="text-sm text-blue-600 hover:text-blue-800">+ Add new category</button>
+                </div>
+              </div>
+          
+          <div>
+              <label htmlFor="filters" className="block text-sm font-medium text-gray-700 mb-1">
+                Filters/Tags
+              </label>
+
+              <div className="flex flex-wrap gap-2 mb-2">
+                {filters.map((filter) => (
+                  <div key={filter} className="flex items-center">
+                    <input
+                      id={`filter-${filter}`}
+                      name="filters"
+                      type="checkbox"
+                      value={filter}
+                      checked={formData.filters.includes(filter)}
+                      onChange={() => handleFilterToggle(filter)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor={`filter-${filter}`} className="ml-2 text-sm text-gray-700">
+                      {filter}
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-1">
+                <input
+                  type="text"
+                  placeholder="Add new filter/tag"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (e.currentTarget.value.trim() && !formData.filters.includes(e.currentTarget.value.trim())) {
+                        setFormData((prev) => ({
+                          ...prev,
+                          filters: [...prev.filters, e.currentTarget.value.trim()],
+                        }));
+                      }
+                      e.currentTarget.value = '';
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              </div>
+
+          
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label htmlFor="size" className="block text-sm font-medium text-gray-700 mb-1">Preset Size</label>
+                  <select  onChange={handleInputChange} id="size" name="size" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Select a size</option>
+                    {sizes.map((size) => (<option key={size} value={size}>{size} cards</option>))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">Price (€)</label>
+                  <input required  onChange={handleInputChange} type="number" id="price" name="price" step="0.01" min="0" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="19.99" />
+                </div>
+              </div>
+          
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Upload Images</label>
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                  <div className="space-y-1 text-center">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                      <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <div className="flex text-sm text-gray-600">
+                      <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                        <span>Upload files</span>
+                        <input required  onChange={handleInputChange} id="file-upload" name="images" type="file" className="sr-only" multiple />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
+                    </div>
+                    <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
+                  </div>
+                </div>
+              </div>
+          
+              <div className="flex justify-end gap-3 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setCurrentView('list')}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="px-4 py-2 border border-transparent rounded-md text-sm font-medium bg-custom-yellow hover:bg-custom-yellow cursor-pointer"
+                >
+                  Create Preset
+                </button>
+              </div>
+            </form>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      
+    <div className="container mx-auto px-4 py-8 bg-gray-50">
+      <div className="mb-8 flex justify-between">
+        <div className='w-3/4'>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Presets Management</h1>
+          <p className="text-gray-600">This page allows you to manage all presets (collections of egg cards). You can create new presets, edit existing ones, and organize them into categories.</p>
+        </div>
+  
+        <div className="mb-8">
+          <button
+            onClick={() => setCurrentView('create')}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200"
+          >
+            Create New Preset
+          </button>
+        </div>
+      </div>
+  
+      {preset.length > 0 ? (
+        <div className="grid grid-cols-1 gap-6">
+          {preset.map((item) => (
+            <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden border">
+              <div className="p-6">
+                {/* Preset Details - Top Section */}
+                <div className="flex flex-col md:flex-row gap-6">
+                  <div className="w-full">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="mb-2">
+                          <p className="text-sm text-gray-500 mb-1">English Title</p>
+                          <h2 className="text-lg font-semibold text-gray-800">
+                            {item.preset_name?.en_name || 'Untitled Preset'}
+                          </h2>
+                        </div>
+                        <div className="mb-4">
+                          <p className="text-sm text-gray-500 mb-1">German Title</p>
+                          <h2 className="text-lg font-semibold text-gray-800">
+                            {item.preset_name?.de_name || 'Unbenanntes Preset'}
+                          </h2>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-5">
+                      <div className="flex gap-3">
+                              <button onClick={() => handleEdit(item.id)} className="px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md font-medium">Edit</button>
+                              <button onClick={() => handleDelete(item.id)}className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-md font-medium">Delete</button>
+                           </div>
+                        <div className="flex">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mb-2">{item.category || 'Uncategorized'}</span>
+                        </div>
+
+                        <div className="bg-gray-100 px-3 py-2 rounded-lg text-center">
+                          <p className="text-xs text-gray-500">Preset Size</p>
+                          <p className="text-xl font-bold text-gray-800">
+                            {item.preset_size || 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+  
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">English Description</p>
+                        <p className="text-gray-700">
+                          {item.preset_desc?.en_desc || 'No description'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">German Description</p>
+                        <p className="text-gray-700">
+                          {item.preset_desc?.de_desc || 'Keine Beschreibung'}
+                        </p>
+                      </div>
+                    </div>
+  
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-500 mb-1">Filters/Tags</p>
+                      <div className="flex flex-wrap gap-2">
+                        {item.filters?.map((filter, index) => (
+                          <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            {filter}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+  
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="bg-gray-100 px-3 py-2 rounded-lg">
+                        <p className="text-sm text-gray-500">Price</p>
+                        <p className="text-lg font-bold">€{item.preset_price || '0.00'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Created</p>
+                        <p className="text-sm font-medium">
+                          {new Date(item.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+  
+                {/* Images Row - Bottom Section */}
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <p className="text-sm text-gray-500 mb-3">Preset Images</p>
+                  <div className="flex gap-3 overflow-x-auto pb-2">
+                    {item.preset_images?.map((imageUrl, index) => (
+                      <div key={index} className="flex-shrink-0 h-[120px] w-[120px] overflow-hidden rounded-md border border-gray-200">
+                        <img 
+                          src={imageUrl} 
+                          alt={`Preset image ${index + 1}`}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="bg-gray-50 rounded-lg p-8 text-center">
+          <svg
+            className="mx-auto h-12 w-12 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1}
+              d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <h3 className="mt-2 text-lg font-medium text-gray-900">No presets found!</h3>
+          <p className="mt-1 text-gray-500">Get started by creating a new preset.</p>
+        </div>
+      )}
     </div>
   );
 };
