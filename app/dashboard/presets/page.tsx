@@ -10,7 +10,7 @@ const page = () => {
 
   // Form state
   const [formData, setFormData] = useState({titleEn: '', titleDe: '', descEn: '', descDe: '', category: '', filters: [] as string[], size: '', price: '', images: [] as File[] });
-  const sizes = ['24', '75', '96', '120'];
+  const sizes = ['24', '75', '96', '120', '2 / for test'];
   const filters = ['Floral', 'Geometric', 'Minimalist', 'Colorful', 'Vintage'];
 
   useEffect(()=>{
@@ -63,6 +63,11 @@ const page = () => {
   
     if (formData.images.length === 0) {
       alert("Please upload at least one image.");
+      return;
+    }
+
+    if(formData.images.length !== formData.size){
+      alert("Please upload the correct number of images for the selected size.");
       return;
     }
   
