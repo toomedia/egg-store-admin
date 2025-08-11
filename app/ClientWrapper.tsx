@@ -7,40 +7,39 @@ import Sidebar from "./components/Sidebar";
 
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [session, setSession] = useState<any>(null);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        setSession(data.session);
-      } else {
-        router.push("/auth");
-      }
-      setIsLoading(false);
-    });
+  // useEffect(() => {
+  //   supabase.auth.getSession().then(({ data }) => {
+  //     if (data.session) {
+  //       setSession(data.session);
+  //     } else {
+  //       router.push("/auth");
+  //     }
+  //     setIsLoading(false);
+  //   });
 
-    // Optional: listen to auth changes
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (!session) {
-        router.push("/auth");
-      }
-    });
+  //   // Optional: listen to auth changes
+  //   const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+  //     setSession(session);
+  //     if (!session) {
+  //       router.push("/auth");
+  //     }
+  //   });
 
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, [router]);
+  //   return () => {
+  //     listener.subscription.unsubscribe();
+  //   };
+  // }, [router]);
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-  }
+  // if (isLoading) {
+  //   return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  // }
 
-  if (!session) {
-    // Auth page will be rendered by Next.js routing when at /auth
-    return <>{children}</>;
-  }
+  // if (!session) {
+  //   return <>{children}</>;
+  // }
 
   return (
     <div className="flex min-h-screen">
