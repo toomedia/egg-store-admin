@@ -4,7 +4,7 @@ import {supabase} from "../../../utils/supabaseClient"
 import {ArrowLeft } from "lucide-react"
 
 const page = () => {
-  const [currentView, setCurrentView] = useState<'list' | 'create'>('list');
+  const [currentView, setCurrentView] = useState<'list' | 'create'>('create');
   const [preset, setPreset] = useState([])
   const categories = ['Nature', 'Abstract', 'Easter', 'Animals', 'Holiday'];
 
@@ -29,14 +29,22 @@ const page = () => {
   },[currentView, location.href])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    console.log("formData", formData.images);
+
     const { name, type } = e.target;
   
     if (type === "file") {
       const files = (e.target as HTMLInputElement).files;
       if (!files) return;
+      
+      const imageObjects = Array.from(files).map(file => ({
+        fileObject: file,
+        previewUrl: URL.createObjectURL(file)
+      }));
+      
       setFormData((prev) => ({
         ...prev,
-        [name]: Array.from(files), 
+        [name]: imageObjects, 
       }));
     } else {
       const { value } = e.target;
@@ -57,42 +65,39 @@ const page = () => {
     }));
   };
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-  
     if (formData.images.length === 0) {
       alert("Please upload at least one image.");
       return;
     }
-
-    if(formData.images.length !== formData.size){
+  
+    if(formData.images.length !== parseInt(formData.size)) {
       alert("Please upload the correct number of images for the selected size.");
       return;
     }
   
     try {
       const uploadedImageUrls: string[] = [];
-
+  
       for (let image of formData.images) {
-        console.log("🚀 ~ handleSubmit ~ formData.images:", formData.images)
-
-        const fileExt = image.name.split(".").pop();
+        const file = image.fileObject; // Access the actual File object
+        const fileExt = file.name.split(".").pop();
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
         const filePath = `presets/${fileName}`;
   
         let { error: uploadError } = await supabase.storage
           .from("presets")
-          .upload(filePath, image);
-          console.log("🚀 ~ handleSubmit ~ image:", image)
-          console.log("🚀 ~ handleSubmit ~ filePath:", filePath)
+          .upload(filePath, file);
   
         if (uploadError) {
           console.error("Image upload error:", uploadError);
+          // Clean up any created URLs
+          formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
           return;
         }
   
-        // 2️⃣ Get public URL
+        // Get public URL
         const { data: publicUrlData } = supabase.storage
           .from("presets")
           .getPublicUrl(filePath);
@@ -100,7 +105,10 @@ const page = () => {
         uploadedImageUrls.push(publicUrlData.publicUrl);
       }
   
-      // 3️⃣ Save preset in table with image URLs
+      // Clean up the object URLs after upload
+      formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
+  
+      // Save preset in table with image URLs
       const { data, error } = await supabase
         .from("presets")
         .insert({
@@ -132,6 +140,8 @@ const page = () => {
   
     } catch (err) {
       console.error("Unexpected error:", err);
+      // Clean up any created URLs in case of error
+      formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
     }
   };
   
@@ -243,25 +253,75 @@ const page = () => {
               </div>
           
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Upload Images</label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md" 
-                onClick={()=>{if(!formData.size){alert("Please select a size first"); return}}}
-                >
-                  <div className="space-y-1 text-center">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                      <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <div className="flex text-sm text-gray-600">
-                      <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
-                        <span>Upload files</span>
-                        <input required  onChange={handleInputChange} id="file-upload" name="images" type="file" className="sr-only" multiple />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Upload Images</label>
+                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md" 
+                    onClick={()=>{if(!formData.size){alert("Please select a size first"); return}}}
+                  >
+                    <div className="space-y-1 text-center">
+                      <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <div className="flex text-sm text-gray-600">
+                        <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                          <span>Upload files</span>
+                          <input 
+                            id="file-upload" 
+                            name="images" 
+                            type="file" 
+                            className="sr-only" 
+                            multiple 
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files.length > 0) {
+                                const filesArray = Array.from(e.target.files).map(file => ({
+                                  fileObject: file,
+                                  previewUrl: URL.createObjectURL(file)
+                                }));
+                                setFormData(prev => ({
+                                  ...prev,
+                                  images: [...prev.images, ...filesArray]
+                                }));
+                              }
+                            }}
+                          />
+                        </label>
+                        <p className="pl-1">or drag and drop</p>
+                      </div>
+                      <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
                     </div>
-                    <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
                   </div>
+
+                  {formData.images.length > 0 && (
+                    <div className="mt-4">
+                      <h3 className="text-sm font-medium text-gray-700 mb-2">Selected Images ({formData.images.length})</h3>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                        {formData.images.map((image, index) => (
+                          <div key={index} className="relative group">
+                            <img 
+                              src={image.previewUrl} 
+                              alt={`Preview ${index}`} 
+                              className="h-24 w-full object-cover rounded-md"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Revoke the object URL to avoid memory leaks
+                                URL.revokeObjectURL(image.previewUrl);
+                                setFormData(prev => ({
+                                  ...prev,
+                                  images: prev.images.filter((_, i) => i !== index)
+                                }));
+                              }}
+                              className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+                
           
               <div className="flex justify-end gap-3 pt-4">
                 <button 
