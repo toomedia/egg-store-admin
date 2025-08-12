@@ -25,14 +25,14 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
 const ReportsManager = () => {
-  const [reports, setReports] = useState([]);
+  const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedReports, setSelectedReports] = useState([]);
+  const [selectedReports, setSelectedReports] = useState<any[]>([]);
   const [reportTypeFilter, setReportTypeFilter] = useState('all');
-  const [dateRange, setDateRange] = useState([null, null]);
+  const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
   const [startDate, endDate] = dateRange;
   
   const itemsPerPage = 8;
@@ -91,11 +91,11 @@ const ReportsManager = () => {
   const currentItems = filteredReports.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(filteredReports.length / itemsPerPage);
 
-  const handlePageChange = (pageNumber) => {
+  const handlePageChange = (pageNumber: number) => {
     setCurrentPage(pageNumber);
   };
 
-  const generateReport = async (type) => {
+  const generateReport = async (type: string) => {
     setGeneratingReport(true);
     try {
       // Simulate report generation
@@ -125,7 +125,7 @@ const ReportsManager = () => {
     }
   };
 
-  const handleDeleteReport = async (reportId) => {
+  const handleDeleteReport = async (reportId: string) => {
     if (!confirm('Are you sure you want to delete this report?')) return;
     
     try {
@@ -156,13 +156,13 @@ const ReportsManager = () => {
     }
   };
 
-  const formatFileSize = (bytes) => {
+  const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const getReportIcon = (type) => {
+  const getReportIcon = (type: string) => {
     const reportType = reportTypes.find(rt => rt.id === type);
     return reportType ? reportType.icon : <FileText size={18} />;
   };
@@ -182,7 +182,10 @@ const ReportsManager = () => {
           <div className="flex gap-3">
             <button 
               className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
-              onClick={() => document.getElementById('reportTypeModal').showModal()}
+              onClick={() => {
+                const modal = document.getElementById('reportTypeModal') as HTMLDialogElement;
+                if (modal) modal.showModal();
+              }}
             >
               <Plus className="mr-2" size={18} />
               Generate Report
@@ -204,7 +207,8 @@ const ReportsManager = () => {
                 key={type.id}
                 className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 flex flex-col items-center"
                 onClick={() => {
-                  document.getElementById('reportTypeModal').close();
+                  const modal = document.getElementById('reportTypeModal') as HTMLDialogElement;
+                  if (modal) modal.close();
                   generateReport(type.id);
                 }}
                 disabled={generatingReport}

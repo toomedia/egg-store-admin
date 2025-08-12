@@ -23,14 +23,14 @@ import {
 } from "lucide-react";
 
 const AdminManager = () => {
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [selectedUsers, setSelectedUsers] = useState<any[]>([]);
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [editUser, setEditUser] = useState(null);
+  const [editUser, setEditUser] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSendingInvite, setIsSendingInvite] = useState(false);
   
@@ -79,11 +79,11 @@ const AdminManager = () => {
   const currentItems = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
 
-  const handlePageChange = (pageNumber) => {
+  const handlePageChange = (pageNumber: number) => {
     setCurrentPage(pageNumber);
   };
 
-  const handleRoleChange = async (userId, newRole) => {
+  const handleRoleChange = async (userId: string, newRole: string) => {
     try {
       const { error } = await supabase
         .from('users')
@@ -100,7 +100,7 @@ const AdminManager = () => {
     }
   };
 
-  const handleStatusChange = async (userId, newStatus) => {
+  const handleStatusChange = async (userId: string, newStatus: string) => {
     try {
       const { error } = await supabase
         .from('users')
@@ -117,7 +117,7 @@ const AdminManager = () => {
     }
   };
 
-  const handleDeleteUser = async (userId) => {
+  const handleDeleteUser = async (userId: string) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
     
     try {
@@ -156,7 +156,7 @@ const AdminManager = () => {
     }
   };
 
-  const handleSendInvite = async (email) => {
+  const handleSendInvite = async (email: string) => {
     setIsSendingInvite(true);
     try {
       const { error } = await supabase.auth.admin.inviteUserByEmail(email, {

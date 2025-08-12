@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 const OrdersPage = () => {
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -63,7 +63,7 @@ const OrdersPage = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -71,7 +71,7 @@ const OrdersPage = () => {
     });
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
         return (

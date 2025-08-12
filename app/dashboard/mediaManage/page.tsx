@@ -9,6 +9,8 @@ import {
   Search,
   Filter,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Grid,
   List,
   Trash2,
@@ -24,13 +26,13 @@ import {
 } from "lucide-react";
 
 const MediaManager = () => {
-  const [media, setMedia] = useState([]);
+  const [media, setMedia] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid');
-  const [selectedMedia, setSelectedMedia] = useState([]);
+  const [selectedMedia, setSelectedMedia] = useState<any[]>([]);
   const [currentFolder, setCurrentFolder] = useState('All Media');
-  const [uploadProgress, setUploadProgress] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
 
@@ -80,12 +82,12 @@ const MediaManager = () => {
   const currentItems = filteredMedia.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(filteredMedia.length / itemsPerPage);
 
-  const handlePageChange = (pageNumber) => {
+  const handlePageChange = (pageNumber: number) => {
     setCurrentPage(pageNumber);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleUpload = async (e) => {
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -102,13 +104,7 @@ const MediaManager = () => {
           .from('media')
           .upload(filePath, file, {
             cacheControl: '3600',
-            upsert: false,
-            onProgress: (progress) => {
-              setUploadProgress(prev => ({
-                ...prev,
-                progress: Math.round((progress.loaded / progress.total) * 100)
-              }));
-            }
+            upsert: false
           });
 
         if (error) throw error;
@@ -139,7 +135,7 @@ const MediaManager = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
     
     try {
@@ -190,7 +186,7 @@ const MediaManager = () => {
     }
   };
 
-  const getFileIcon = (type) => {
+  const getFileIcon = (type: string) => {
     if (fileTypes.image.includes(type)) {
       return <ImageIcon className="text-[#e6d281]" size={24} />;
     } else if (fileTypes.video.includes(type)) {
@@ -201,7 +197,7 @@ const MediaManager = () => {
     return <File className="text-[#e6d281]" size={24} />;
   };
 
-  const formatFileSize = (bytes) => {
+  const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

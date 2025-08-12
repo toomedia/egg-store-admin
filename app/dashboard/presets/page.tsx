@@ -540,7 +540,7 @@ import {
 
 const page = () => {
   const [currentView, setCurrentView] = useState<'list' | 'create'>('list');
-  const [preset, setPreset] = useState([])
+  const [preset, setPreset] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false);
   const categories = ['Nature', 'Abstract', 'Easter', 'Animals', 'Holiday'];
 
@@ -552,9 +552,9 @@ const page = () => {
     descDe: '', 
     category: '', 
     filters: [] as string[], 
-    size: { label: '', value: '' }, 
+    size: { label: '', value: '' as string | number }, 
     price: '', 
-    images: [] as File[] 
+    images: [] as any[] 
   });
 
   const sizes = [
@@ -624,7 +624,7 @@ const page = () => {
       return;
     }
   
-    if(formData.images.length !== parseInt(formData.size.value)) {
+    if(formData.images.length !== parseInt(String(formData.size.value))) {
       alert("Please upload the correct number of images for the selected size.");
       return;
     }
@@ -1164,7 +1164,7 @@ const page = () => {
                         Filters/Tags
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {item.filters?.map((filter, index) => (
+                        {item.filters?.map((filter: string, index: number) => (
                           <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#e6d281] text-gray-800">
                             {filter}
                           </span>
@@ -1199,7 +1199,7 @@ const page = () => {
                     Preset Images ({item.preset_images?.length || 0})
                   </p>
                   <div className="flex gap-3 overflow-x-auto pb-2">
-                    {item.preset_images?.map((imageUrl, index) => (
+                    {item.preset_images?.map((imageUrl: string, index: number) => (
                       <div key={index} className="flex-shrink-0 h-[100px] w-[100px] overflow-hidden rounded-md border border-gray-200">
                         <img 
                           src={imageUrl} 

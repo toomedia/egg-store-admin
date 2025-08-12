@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 const CustomersPage = () => {
-  const [customers, setCustomers] = useState([]);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
@@ -58,7 +58,7 @@ const CustomersPage = () => {
     return matchesSearch && matchesTab;
   });
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -66,8 +66,8 @@ const CustomersPage = () => {
     });
   };
 
-  const getInitials = (name) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  const getInitials = (name: string) => {
+    return name.split(' ').map((n: string) => n[0]).join('').toUpperCase();
   };
 
   return (

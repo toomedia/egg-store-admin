@@ -8,7 +8,7 @@ export default function page() {
     const router = useRouter();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [isError, setIsError] = useState(null);
+    const [isError, setIsError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
     const handleLogin = async () => {
@@ -41,7 +41,7 @@ export default function page() {
     
         if (userError || !userData) {
             console.error(userError || 'User is not admin');
-            setIsError(userError || 'User is not admin');
+            setIsError(userError?.message || 'User is not admin');
             return;
         }
     
@@ -53,7 +53,7 @@ export default function page() {
 
         } catch (error) {
         console.error(error);
-        setIsError(error.message);
+        setIsError(error instanceof Error ? error.message : 'An unknown error occurred');
         } finally {
         setIsLoading(false);
         }
