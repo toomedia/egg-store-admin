@@ -534,12 +534,14 @@ import {
   Trash2,
   ChevronDown,
   X,
-  Check
+  Check,
+  Loader2
 } from "lucide-react"
 
 const page = () => {
   const [currentView, setCurrentView] = useState<'list' | 'create'>('list');
   const [preset, setPreset] = useState([])
+  const [isLoading, setIsLoading] = useState(false);
   const categories = ['Nature', 'Abstract', 'Easter', 'Animals', 'Holiday'];
 
   // Form state
@@ -615,6 +617,7 @@ const page = () => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    setIsLoading(true);
     e.preventDefault();
     if (formData.images.length === 0) {
       alert("Please upload at least one image.");
@@ -686,6 +689,8 @@ const page = () => {
     } catch (err) {
       console.error("Unexpected error:", err);
       formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
+    }finally{
+      setIsLoading(false);
     }
   };
 
@@ -1218,6 +1223,15 @@ const page = () => {
             </div>
             <h3 className="text-lg font-medium text-gray-900">No presets found!</h3>
             <p className="mt-1 text-gray-500 mb-6">Get started by creating your first preset.</p>
+            {isLoading ? (
+              <button
+              onClick={() => setCurrentView('create')}
+              className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
+            >
+              <Loader2 className="mr-2" size={16} />
+              Creating Preset...
+            </button>
+            ):(
             <button
               onClick={() => setCurrentView('create')}
               className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
@@ -1225,6 +1239,7 @@ const page = () => {
               <PlusCircle className="mr-2" size={16} />
               Create Preset
             </button>
+            )}
           </div>
         </div>
       )}
