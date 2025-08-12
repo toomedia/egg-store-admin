@@ -368,7 +368,6 @@
 //   </div>
 // );
 
-
 "use client";
 import React from "react";
 import {
@@ -385,25 +384,28 @@ import Link from "next/link";
 
 const Dashboard = () => {
   return (
-    <div className="min-h-screen bg-gray-50 p-6 font-manrope">
-      <div className="flex justify-between items-center mb-6">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6 font-manrope">
+      {/* Top Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 font-manrope">Dashboard</h1>
-          <p className="text-gray-500 mt-1 font-manrope">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-500 mt-1">
             Welcome back! Here's what's happening with your egg card business.
           </p>
         </div>
-        <div className="flex gap-3">
-          <Link href="/dashboard/orders">
-            <button className="px-4 py-2 rounded-lg bg-white text-sm font-medium text-gray-700 shadow hover:bg-gray-100 flex items-center gap-2 font-manrope">
+
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full md:w-auto">
+          <Link href="/dashboard/orders" className="w-full sm:w-auto">
+            <button className="w-full sm:w-auto px-4 py-2 rounded-lg bg-white text-sm font-medium text-gray-700 shadow hover:bg-gray-100 flex items-center justify-center sm:justify-start gap-2">
               <span className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[#e6d281]">
                 <EyeIcon className="w-4 h-4" />
               </span>
               View Pending Orders
             </button>
           </Link>
-          <Link href="/dashboard/presets">
-            <button className="px-4 py-2 rounded-lg bg-[#e6d281] text-black text-sm font-manrope shadow flex items-center gap-2 font-manrope">
+          <Link href="/dashboard/presets" className="w-full sm:w-auto">
+            <button className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#e6d281] text-black text-sm shadow flex items-center justify-center sm:justify-start gap-2">
               <span className="w-8 h-8 rounded-full flex items-center justify-center text-black">
                 <PlusIcon className="w-4 h-4" />
               </span>
@@ -413,7 +415,8 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+      {/* Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <StatCard
           title="Total Orders Today"
           value="24"
@@ -440,9 +443,10 @@ const Dashboard = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow p-6 font-manrope">
-          <h2 className="font-semibold font-manrope text-lg mb-4">Orders by Status</h2>
+      {/* Orders & Best Sellers */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="bg-white rounded-xl shadow p-5">
+          <h2 className="font-semibold text-lg mb-4">Orders by Status</h2>
           <div className="space-y-3">
             <StatusRow color="bg-yellow-500" label="Pending" count={12} />
             <StatusRow color="bg-blue-600" label="Delivering" count={34} />
@@ -450,8 +454,8 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow p-6 font-manrope">
-          <h2 className="font-semibold font-manrope text-lg mb-4">Best Selling Presets</h2>
+        <div className="bg-white rounded-xl shadow p-5">
+          <h2 className="font-semibold text-lg mb-4">Best Selling Presets</h2>
           <div className="space-y-3 text-sm">
             <BestSeller label="Easter Bundle - 24 Pack" count="89 sales" amount="$2,136" />
             <BestSeller label="Nature Collection" count="67 sales" amount="$1,608" />
@@ -461,7 +465,8 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow p-6 font-manrope">
+      {/* Activity Feed */}
+      <div className="bg-white rounded-xl shadow p-5">
         <h2 className="font-semibold text-lg mb-4 flex items-center">
           <ClockIcon className="w-5 h-5 mr-2 text-yellow-500" />
           Recent Activity
@@ -503,8 +508,9 @@ const Dashboard = () => {
 
 export default Dashboard;
 
+// Reusable Components
 const StatCard = ({ title, value, subtitle, icon }: any) => (
-  <div className="bg-white rounded-xl shadow p-5 flex justify-between items-center font-manrope">
+  <div className="bg-white rounded-xl shadow p-5 flex justify-between items-center">
     <div>
       <p className="text-sm text-gray-500">{title}</p>
       <h3 className="text-2xl font-bold text-gray-900">{value}</h3>
@@ -517,7 +523,7 @@ const StatCard = ({ title, value, subtitle, icon }: any) => (
 );
 
 const StatusRow = ({ color, label, count }: any) => (
-  <div className="flex justify-between items-center text-sm text-gray-700 font-manrope">
+  <div className="flex justify-between items-center text-sm text-gray-700">
     <div className="flex items-center space-x-3">
       <span className={`w-3 h-3 rounded-full ${color}`}></span>
       <span>{label}</span>
@@ -527,7 +533,7 @@ const StatusRow = ({ color, label, count }: any) => (
 );
 
 const BestSeller = ({ label, count, amount }: any) => (
-  <div className="flex justify-between items-center font-manrope">
+  <div className="flex justify-between items-center">
     <div>
       <p className="text-gray-800 font-medium">{label}</p>
       <p className="text-gray-400 text-xs">{count}</p>
@@ -537,7 +543,7 @@ const BestSeller = ({ label, count, amount }: any) => (
 );
 
 const ActivityRow = ({ icon, message, sub, time, tag }: any) => (
-  <div className="flex justify-between items-start font-manrope">
+  <div className="flex justify-between items-start">
     <div className="flex space-x-4">
       <div className="w-8 h-8 bg-gray-100 text-[#e6d281] rounded-full flex items-center justify-center">
         {icon}
@@ -548,7 +554,7 @@ const ActivityRow = ({ icon, message, sub, time, tag }: any) => (
         <p className="text-gray-400 text-xs">{time}</p>
       </div>
     </div>
-    <span className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-md font-manrope whitespace-nowrap">
+    <span className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-md whitespace-nowrap">
       {tag}
     </span>
   </div>

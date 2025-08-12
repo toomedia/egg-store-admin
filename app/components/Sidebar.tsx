@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useState } from "react";
 import Link from "next/link";
@@ -55,7 +55,7 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-40 w-64 min-h-screen bg-white flex flex-col border-r border-gray-200 transform ${
+        className={`fixed lg:static top-0 left-0 z-40 w-64 h-full bg-white flex flex-col border-r border-gray-200 transform ${
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0 transition-transform duration-200 ease-in-out font-manrope`}
       >
