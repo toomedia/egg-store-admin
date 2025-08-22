@@ -72,8 +72,11 @@ export default function Sidebar() {
                 <Egg className="h-6 w-6 text-[#e6d281]" />
               </div>
               <div>
-                <h1 className="text-lg text-gray-800 leading-tight">Eggception</h1>
-                <span className="text-xs text-gray-500">Admin Dashboard</span>
+        <div className="flex flex-col leading-tight">
+  <h1 className="text-2xl font-bold tracking-tight text-gray-900">Eggception</h1>
+  <span className="text-sm text-gray-500">Admin Dashboard</span>
+</div>
+
               </div>
             </Link>
           </div>
