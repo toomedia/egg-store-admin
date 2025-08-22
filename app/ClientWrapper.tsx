@@ -2,50 +2,57 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../utils/supabaseClient";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Sidebar from "./components/Sidebar";
+import Topbar from "./components/Topbar";
 
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
+  const pathname = usePathname();
+  const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
 
-  // useEffect(() => {
-  //   supabase.auth.getSession().then(({ data }) => {
-  //     if (data.session) {
-  //       setSession(data.session);
-  //     } else {
-  //       router.push("/auth");
-  //     }
-  //     setIsLoading(false);
-  //   });
+  useEffect(() => {
+    const userData = localStorage.getItem("userData");
+    
+    if (pathname === "/auth") {
+      // If we're on the auth page, don't redirect
+      setIsLoading(false);
+      return;
+    }
 
-  //   // Optional: listen to auth changes
-  //   const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-  //     setSession(session);
-  //     if (!session) {
-  //       router.push("/auth");
-  //     }
-  //   });
+    if (!userData) {
+      router.push("/auth");
+      return;
+    }
 
-  //   return () => {
-  //     listener.subscription.unsubscribe();
-  //   };
-  // }, [router]);
+    setSession(JSON.parse(userData));
+    setIsLoading(false);
+  }, [router, pathname]);
 
-  // if (isLoading) {
-  //   return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-  // }
+  if (isLoading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
 
-  // if (!session) {
-  //   return <>{children}</>;
-  // }
+  // If we're on the auth page, render children without dashboard layout
+  if (pathname === "/auth") {
+    return <>{children}</>;
+  }
 
+  // If no session and not on auth page, redirect to auth
+  if (!session) {
+    router.push("/auth");
+    return null;
+  }
+
+  // Render dashboard layout for authenticated users
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 lg:ml-64">{children}</main>
-
+      <main className="flex-1 lg:ml-64">
+        <Topbar />
+        {children}
+      </main>
     </div>
   );
 }

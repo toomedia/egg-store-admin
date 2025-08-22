@@ -1,8 +1,5 @@
-
 import "./globals.css";
 import ClientWrapper from "./ClientWrapper";
-import Topbar from "./components/Topbar";
-
 
 export default function RootLayout({
   children,
@@ -13,10 +10,8 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         <ClientWrapper>
-          <Topbar />
           {children}
         </ClientWrapper>
-      
       </body>
     </html>
   );
