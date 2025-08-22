@@ -26,7 +26,6 @@ const OrdersPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
-
   const statuses = [
     { id: 'all', name: 'All Orders' },
     { id: 'pending', name: 'Pending' },
