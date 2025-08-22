@@ -522,8 +522,7 @@
 "use client"
 import React, { useEffect, useState } from 'react';
 import {supabase} from "../../../utils/supabaseClient"
-import { 
-  ArrowLeft, 
+import {  ArrowLeft, 
   PlusCircle, 
   Image as ImageIcon,
   Tag,
