@@ -63,6 +63,7 @@ export default function Sidebar() {
         <div className="flex flex-col flex-grow overflow-y-auto">
           {/* Logo Section */}
           <div className="p-6 border-b border-gray-200">
+            
             <Link
               href="/"
               className="flex items-center space-x-3 hover:opacity-90 transition-opacity"
