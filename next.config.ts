@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  domains: ['puqhpgsbyvthttfhbmru.supabase.co'],
 };
 
 export default nextConfig;

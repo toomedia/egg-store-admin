@@ -39,7 +39,7 @@ const UsersPage = () => {
   }, []);
 
   const filteredUsers = users.filter((user) => {
-    const name = user.full_name || "";
+    const name = user.name || "";
     const email = user.email || "";
 
     const matchesSearch =

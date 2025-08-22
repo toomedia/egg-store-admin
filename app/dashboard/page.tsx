@@ -368,138 +368,334 @@
 //   </div>
 // );
 
+
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   ShoppingCartIcon,
   CubeIcon,
-  CheckCircleIcon,
+  ChartBarIcon,
   ClockIcon,
   PlusIcon,
-  ChartBarIcon,
-  UserIcon,
   EyeIcon,
+  UserIcon,
+  ExclamationTriangleIcon,
 } from "@heroicons/react/24/solid";
 import Link from "next/link";
+import { supabase } from "../../utils/supabaseClient";
+import Image from "next/image";
 
+// Main Dashboard Component
 const Dashboard = () => {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [presets, setPresets] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [
+        { data: ordersData, error: ordersError },
+        { data: presetsData, error: presetsError },
+        { data: usersData, error: usersError },
+      ] = await Promise.all([
+        supabase.from("orders").select("*"),
+        supabase.from("presets").select("*"),
+        supabase.from("users").select("*"),
+      ]);
+
+      if (ordersError || presetsError || usersError) {
+        console.error(
+          "Supabase fetch error:",
+          ordersError || presetsError || usersError
+        );
+        throw new Error("One or more tables failed to load.");
+      }
+
+      setOrders(ordersData || []);
+      setPresets(presetsData || []);
+      setUsers(usersData || []);
+
+      buildActivities(ordersData || [], presetsData || [], usersData || []);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      setError(`Failed to load dashboard: ${(error as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const buildActivities = (
+    ordersData: any[],
+    presetsData: any[],
+    usersData: any[]
+  ) => {
+    // Sort newest first
+    const sortedOrders = ordersData
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    const sortedPresets = presetsData
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    const sortedUsers = usersData
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+    const order = sortedOrders[0];
+    const preset = sortedPresets[0];
+    const user = sortedUsers[0];
+
+    const acts = [];
+
+    if (order) {
+      acts.push({
+        icon: <ShoppingCartIcon className="w-4 h-4" />,
+        message:
+          order.status === "completed"
+            ? `Order #${order.id} completed`
+            : `New order by ${order.user_info?.email || "unknown user"}`,
+        sub: order.product_name || "Egg Card",
+        time: getRelativeTime(order.created_at),
+        timeObj: order.created_at,
+        tag: order.status === "completed" ? "Completed" : "New Order",
+      });
+    }
+
+    if (preset) {
+      acts.push({
+        icon: <CubeIcon className="w-4 h-4" />,
+        message: "New preset created",
+        sub: preset.preset_name?.en_name || "Untitled",
+        time: getRelativeTime(preset.created_at),
+        timeObj: preset.created_at,
+        tag: "New Product",
+      });
+    }
+
+    if (user) {
+      acts.push({
+        icon: <UserIcon className="w-4 h-4" />,
+        message: "New customer signup",
+        sub: user.email || "No email",
+        time: getRelativeTime(user.created_at),
+        timeObj: user.created_at,
+        tag: "New Customer",
+      });
+    }
+
+    // Sort activities newest first
+    setActivities(
+      acts.sort(
+        (a, b) => new Date(b.timeObj).getTime() - new Date(a.timeObj).getTime()
+      )
+    );
+  };
+
+  const getRelativeTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const diff = (new Date().getTime() - date.getTime()) / 1000;
+    if (diff < 60) return "Just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+    return `${Math.floor(diff / 86400)} d ago`;
+  };
+
+  const countOrdersByStatus = () => {
+    const counts = { pending: 0, delivering: 0, completed: 0, other: 0 };
+    orders.forEach((order) => {
+      const status = order.status?.toLowerCase() || "";
+      if (status.includes("pending")) counts.pending++;
+      else if (status.includes("deliver")) counts.delivering++;
+      else if (status.includes("complete")) counts.completed++;
+      else counts.other++;
+    });
+    return counts;
+  };
+
+  const statusCounts = countOrdersByStatus();
+
+  // Calculate sales count per preset
+  const salesCountMap: { [key: string]: number } = {};
+  orders.forEach((order) => {
+    const id = order.preset_id;
+    if (id) {
+      salesCountMap[id] = (salesCountMap[id] || 0) + 1;
+    }
+  });
+
+  // Create enhanced preset sales data with images and descriptions
+  const presetSalesData = presets
+    .map((preset) => {
+      const salesCount = salesCountMap[preset.id] || 0;
+      return {
+        id: preset.id,
+        title: preset.preset_name?.en_name || "Untitled Preset",
+        description: preset.preset_description?.en_description || "No description available",
+        category: preset.category || "Uncategorized",
+        image: preset.preset_images?.[0] || "/placeholder-image.jpg",
+        price: preset.preset_price || 0,
+        salesCount: salesCount,
+        revenue: salesCount * (preset.preset_price || 0),
+      };
+    })
+    .sort((a, b) => b.salesCount - a.salesCount) // Sort by sales count descending
+    .slice(0, 4); // Get top 4
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin h-10 w-10 border-4 border-[#e6d281] border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6 font-manrope">
-      {/* Top Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 mt-1">
-            Welcome back! Here's what's happening with your egg card business.
-          </p>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500">Overview of your egg card store</p>
         </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full md:w-auto">
-          <Link href="/dashboard/orders" className="w-full sm:w-auto">
-            <button className="w-full sm:w-auto px-4 py-2 rounded-lg bg-white text-sm font-medium text-gray-700 shadow hover:bg-gray-100 flex items-center justify-center sm:justify-start gap-2">
-              <span className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-[#e6d281]">
-                <EyeIcon className="w-4 h-4" />
-              </span>
-              View Pending Orders
+        <div className="flex gap-2">
+          <Link href="/dashboard/orders">
+            <button className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg shadow hover:bg-gray-100">
+              <EyeIcon className="w-4 h-4 text-[#e6d281]" />
+              View Orders
             </button>
           </Link>
-          <Link href="/dashboard/presets" className="w-full sm:w-auto">
-            <button className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#e6d281] text-black text-sm shadow flex items-center justify-center sm:justify-start gap-2">
-              <span className="w-8 h-8 rounded-full flex items-center justify-center text-black">
-                <PlusIcon className="w-4 h-4" />
-              </span>
-              Add New Preset
+          <Link href="/dashboard/presets">
+            <button className="flex items-center gap-2 px-4 py-2 bg-[#e6d281] text-black rounded-lg shadow">
+              <PlusIcon className="w-4 h-4" />
+              Add Preset
             </button>
           </Link>
         </div>
       </div>
 
-      {/* Stat Cards */}
+      {error && (
+        <div className="bg-red-100 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+          <div className="flex items-center gap-2">
+            <ExclamationTriangleIcon className="w-5 h-5" />
+            <div>
+              <p className="font-semibold">Error:</p>
+              <p className="text-sm">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <StatCard
-          title="Total Orders Today"
-          value="24"
-          subtitle="+12% vs last month"
+          title="Total Orders"
+          value={orders.length}
           icon={<ShoppingCartIcon className="w-5 h-5" />}
         />
         <StatCard
-          title="This Month's Orders"
-          value="487"
-          subtitle="+23% vs last month"
-          icon={<ChartBarIcon className="w-5 h-5" />}
-        />
-        <StatCard
           title="Active Presets"
-          value="156"
-          subtitle="+8% vs last month"
+          value={presets.length}
           icon={<CubeIcon className="w-5 h-5" />}
         />
         <StatCard
+          title="Total Users"
+          value={users.length}
+          icon={<UserIcon className="w-5 h-5" />}
+        />
+        <StatCard
           title="Total Revenue"
-          value="$12,847"
-          subtitle="+31% vs last month"
+          value={`$${orders.reduce((total, order) => total + (order.total_amount || 44), 0)}`}
           icon={<ChartBarIcon className="w-5 h-5" />}
         />
       </div>
 
-      {/* Orders & Best Sellers */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white rounded-xl shadow p-5">
+        <div className="bg-white p-5 rounded-xl shadow">
           <h2 className="font-semibold text-lg mb-4">Orders by Status</h2>
-          <div className="space-y-3">
-            <StatusRow color="bg-yellow-500" label="Pending" count={12} />
-            <StatusRow color="bg-blue-600" label="Delivering" count={34} />
-            <StatusRow color="bg-green-600" label="Completed" count={441} />
-          </div>
+          <StatusRow
+            color="bg-yellow-500"
+            label="Pending"
+            count={statusCounts.pending}
+          />
+          <StatusRow
+            color="bg-blue-500"
+            label="Delivering"
+            count={statusCounts.delivering}
+          />
+          <StatusRow
+            color="bg-green-600"
+            label="Completed"
+            count={statusCounts.completed}
+          />
+          {statusCounts.other > 0 && (
+            <StatusRow
+              color="bg-gray-500"
+              label="Other"
+              count={statusCounts.other}
+            />
+          )}
         </div>
 
-        <div className="bg-white rounded-xl shadow p-5">
-          <h2 className="font-semibold text-lg mb-4">Best Selling Presets</h2>
-          <div className="space-y-3 text-sm">
-            <BestSeller label="Easter Bundle - 24 Pack" count="89 sales" amount="$2,136" />
-            <BestSeller label="Nature Collection" count="67 sales" amount="$1,608" />
-            <BestSeller label="Abstract Dreams" count="45 sales" amount="$1,080" />
-            <BestSeller label="Spring Flowers" count="32 sales" amount="$768" />
+        <div className="bg-white p-5 rounded-xl shadow">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="font-semibold text-lg">Best Selling Presets</h2>
+            <Link href="/dashboard/presets">
+              <span className="text-sm text-[#e6d281] hover:underline cursor-pointer">
+                View all
+              </span>
+            </Link>
           </div>
+          {presetSalesData.length === 0 ? (
+            <p className="text-gray-400">No sales data available.</p>
+          ) : (
+            <div className="space-y-4">
+              {presetSalesData.map((preset) => (
+                <BestSellerRow
+                  key={preset.id}
+                  title={preset.title}
+                 
+                  category={preset.category}
+                  image={preset.image}
+                  price={preset.price}
+                  salesCount={preset.salesCount}
+                  revenue={preset.revenue}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Activity Feed */}
-      <div className="bg-white rounded-xl shadow p-5">
-        <h2 className="font-semibold text-lg mb-4 flex items-center">
-          <ClockIcon className="w-5 h-5 mr-2 text-yellow-500" />
+      <div className="bg-white p-5 rounded-xl shadow">
+        <h2 className="flex items-center font-semibold text-lg mb-4">
+          <ClockIcon className="w-5 h-5 mr-2 text-[#e6d281]" />
           Recent Activity
         </h2>
         <div className="space-y-4 text-sm">
-          <ActivityRow
-            icon={<ShoppingCartIcon className="w-4 h-4" />}
-            message="New order placed by Sarah Johnson"
-            sub="Easter Bundle - 24 Pack"
-            time="2 minutes ago"
-            tag="New Order"
-          />
-          <ActivityRow
-            icon={<CubeIcon className="w-4 h-4" />}
-            message="Nature Collection updated"
-            sub="Added 5 new designs"
-            time="1 hour ago"
-            tag="Updated"
-          />
-          <ActivityRow
-            icon={<UserIcon className="w-4 h-4" />}
-            message="New customer registration"
-            sub="Mike Chen joined the platform"
-            time="3 hours ago"
-            tag="New Customer"
-          />
-          <ActivityRow
-            icon={<CheckCircleIcon className="w-4 h-4" />}
-            message="Order #12847 completed"
-            sub="Delivered to Emma Wilson"
-            time="5 hours ago"
-            tag="Completed"
-          />
+          {activities.length === 0 ? (
+            <p className="text-gray-400">No recent activity found.</p>
+          ) : (
+            activities.map((act, i) => <ActivityRow key={i} {...act} />)
+          )}
         </div>
       </div>
     </div>
@@ -508,54 +704,106 @@ const Dashboard = () => {
 
 export default Dashboard;
 
-// Reusable Components
-const StatCard = ({ title, value, subtitle, icon }: any) => (
-  <div className="bg-white rounded-xl shadow p-5 flex justify-between items-center">
+// ✅ Reusable Components
+const StatCard = ({ title, value, icon }: any) => (
+  <div className="bg-white p-5 rounded-xl shadow flex justify-between items-center">
     <div>
       <p className="text-sm text-gray-500">{title}</p>
       <h3 className="text-2xl font-bold text-gray-900">{value}</h3>
-      <p className="text-xs text-green-600 font-medium mt-1">{subtitle}</p>
     </div>
-    <div className="w-8 h-8 bg-gray-100 text-[#e6d281] rounded-full flex items-center justify-center">
+    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-[#e6d281]">
       {icon}
     </div>
   </div>
 );
 
 const StatusRow = ({ color, label, count }: any) => (
-  <div className="flex justify-between items-center text-sm text-gray-700">
-    <div className="flex items-center space-x-3">
+  <div className="flex justify-between items-center mb-2 text-sm text-gray-700">
+    <div className="flex items-center gap-2">
       <span className={`w-3 h-3 rounded-full ${color}`}></span>
       <span>{label}</span>
     </div>
-    <span className="font-semibold text-gray-900">{count} orders</span>
+    <span className="font-semibold">{count} orders</span>
   </div>
 );
 
-const BestSeller = ({ label, count, amount }: any) => (
-  <div className="flex justify-between items-center">
-    <div>
-      <p className="text-gray-800 font-medium">{label}</p>
-      <p className="text-gray-400 text-xs">{count}</p>
+// Safe image component that handles external URLs
+const SafeImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
+  const isExternal = src.startsWith('http');
+  
+  // For external images, we'll use a regular img tag until Next.js is configured
+  if (isExternal) {
+    return (
+      <img 
+        src={src} 
+        alt={alt} 
+        className={className}
+        onError={(e) => {
+          // Fallback if image fails to load
+          e.currentTarget.src = '/placeholder-image.jpg';
+        }}
+      />
+    );
+  }
+  
+  // For local images, use Next.js Image component
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      fill
+      className={className}
+    />
+  );
+};
+
+const BestSellerRow = ({ 
+  title, 
+  description, 
+  category, 
+  image, 
+  price, 
+  salesCount, 
+  revenue 
+}: any) => (
+  <div className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
+    <div className="relative w-14 h-14 flex-shrink-0">
+      <SafeImage
+        src={image}
+        alt={title}
+        className="object-cover rounded-md"
+      />
     </div>
-    <p className="text-green-600 font-semibold">{amount}</p>
+    <div className="flex-1 min-w-0">
+      <div className="flex justify-between items-start">
+        <h4 className="font-medium text-gray-900 truncate">{title}</h4>
+        <span className="text-sm font-semibold text-green-600 ml-2">${price}</span>
+      </div>
+      <p className="text-xs text-gray-500 truncate">{description}</p>
+      <div className="flex justify-between items-center mt-1">
+        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+          {category}
+        </span>
+       
+      </div>
+    </div>
   </div>
 );
 
 const ActivityRow = ({ icon, message, sub, time, tag }: any) => (
   <div className="flex justify-between items-start">
-    <div className="flex space-x-4">
-      <div className="w-8 h-8 bg-gray-100 text-[#e6d281] rounded-full flex items-center justify-center">
+    <div className="flex items-start gap-3">
+      <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-[#e6d281]">
         {icon}
       </div>
       <div>
-        <p className="text-gray-900 font-medium">{message}</p>
+        <p className="font-medium text-gray-800">{message}</p>
         <p className="text-gray-400 text-xs">{sub}</p>
-        <p className="text-gray-400 text-xs">{time}</p>
       </div>
     </div>
-    <span className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-md whitespace-nowrap">
-      {tag}
-    </span>
+    <div className="text-right text-xs text-gray-400">
+      <p>{time}</p>
+      <p className="font-semibold text-[#e6d281]">{tag}</p>
+    </div>
   </div>
 );
