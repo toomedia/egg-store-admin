@@ -1,6 +1,6 @@
 "use client"
 
-import React,{useState} from "react";
+import React,{useState, useEffect} from "react";
 import { supabase } from "../../utils/supabaseClient.js";
 import { useRouter } from "next/navigation";
 import { Lock, Mail,Shield, Loader2, CheckCircle, User } from "lucide-react";
@@ -11,6 +11,13 @@ export default function page() {
     const [name, setName] = useState("");
     const [isError, setIsError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        const userData = localStorage.getItem('userData');
+        if(userData){
+            router.push('/dashboard');
+        }
+    }, []);
 
     const handleLogin = async () => {
         setIsLoading(true);
