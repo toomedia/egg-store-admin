@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { getItem, setItem } from "@/utils/indexedDB";
 import { supabase } from "../../../utils/supabaseClient";
 import {
   FiPackage,
@@ -26,6 +27,10 @@ const OrdersPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const DB_NAME = "egg-store-db";
+  const STORE_NAME = "orders";
+
+
   const statuses = [
     { id: 'all', name: 'All Orders' },
     { id: 'pending', name: 'Pending' },
@@ -39,32 +44,66 @@ const OrdersPage = () => {
   };
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+          const fetchAllOrders = async () => {
+        try {
+          let allOrders: any[] = [];
+          
+          try {
+            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
+            allOrders = Array.isArray(storedOrders) ? storedOrders : [];
+          } catch (indexedDBError) {
+            console.warn("IndexedDB not available, fetching from Supabase directly:", indexedDBError);
+          }
 
-      if (error) console.error('Error fetching orders:', error);
+          if (allOrders.length > 0) {
+            console.log("🚀 Loaded orders from IndexedDB:", allOrders);
+          } else {
+            const { data, error } = await supabase.from("orders").select("*");
+            if (error) {
+              console.error("🚀 Error fetching orders:", error);
+              setLoading(false);
+              return;
+            }
+            allOrders = data || [];
+            
+            try {
+              await setItem(DB_NAME, STORE_NAME, "allOrders", allOrders);
+            } catch (indexedDBError) {
+              console.warn("Could not save to IndexedDB:", indexedDBError);
+            }
+            
+            console.log("🚀 Fetched orders from Supabase:", allOrders);
+          }
 
-      const parsedOrders = (data || []).map(order => ({
-        ...order,
-        order_id: order.order_id || generateOrderId(),
-        preset_object: typeof order.preset_object === "string"
-          ? JSON.parse(order.preset_object)
-          : order.preset_object,
-        user_info: typeof order.user_info === "string"
-          ? JSON.parse(order.user_info)
-          : order.user_info,
-      }));
+          setOrders(allOrders);
+          setLoading(false);
+        } catch (err) {
+          console.error("🚀 Unexpected error:", err);
+          setLoading(false);
+        }
+      };
 
-      setOrders(parsedOrders);
-      setLoading(false);
+    fetchAllOrders();
+
+          const channel = supabase
+        .channel("public:orders")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" },
+          async (payload) => {
+            console.log("🚀 New order inserted:", payload.new);
+            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
+            const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
+            const updatedOrders = [...existingOrders, payload.new];
+            await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
+            setOrders(updatedOrders);
+          }
+        )
+        .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
-
-    fetchOrders();
   }, []);
+
 
   const filteredOrders = orders.filter(order => {
     const search = searchQuery.toLowerCase();

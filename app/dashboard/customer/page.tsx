@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   ShieldOff,
 } from "lucide-react";
+import { getItem, setItem } from "@/utils/indexedDB";
 
 const UsersPage = () => {
   const [users, setUsers] = useState<any[]>([]);
@@ -18,25 +19,76 @@ const UsersPage = () => {
   const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      setLoading(true);
+    const DB_NAME = "egg-store-db";
+    const STORE_NAME = "users";
+  
+    const fetchAllUsers = async () => {
       try {
-        const { data, error } = await supabase
-          .from("users")
-          .select("*")
-          .order("created_at", { ascending: false });
-
-        if (error) throw error;
-        setUsers(data || []);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-      } finally {
+        // ✅ IndexedDB check
+        let allUsers: any[] = [];
+        
+        try {
+          const storedUsers = await getItem(DB_NAME, STORE_NAME, "allUsers");
+          allUsers = Array.isArray(storedUsers) ? storedUsers : [];
+        } catch (indexedDBError) {
+          console.warn("IndexedDB not available, fetching from Supabase directly:", indexedDBError);
+        }
+  
+        if (allUsers.length > 0) {
+          console.log("🚀 Loaded users from IndexedDB:", allUsers);
+        } else {
+          const { data, error } = await supabase.from("users").select("*");
+          if (error) {
+            console.error("🚀 Error fetching users:", error);
+            setLoading(false);
+            return;
+          }
+          allUsers = data || [];
+          
+          try {
+            await setItem(DB_NAME, STORE_NAME, "allUsers", allUsers);
+          } catch (indexedDBError) {
+            console.warn("Could not save to IndexedDB:", indexedDBError);
+          }
+          
+          console.log("🚀 Fetched users from Supabase:", allUsers);
+        }
+  
+        setUsers(allUsers);
+        setLoading(false);
+  
+      } catch (err) {
+        console.error("🚀 Unexpected error:", err);
         setLoading(false);
       }
     };
-
-    fetchUsers();
+  
+    fetchAllUsers();
+  
+    // ✅ Supabase Realtime subscription
+    const channel = supabase
+      .channel("public:users")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "users" },
+        async (payload) => {
+          console.log("🚀 New user inserted:", payload.new);
+  
+          const storedUsers = await getItem(DB_NAME, STORE_NAME, "allUsers");
+          const existingUsers: any[] = Array.isArray(storedUsers) ? storedUsers : [];
+          const updatedUsers = [...existingUsers, payload.new];
+  
+          await setItem(DB_NAME, STORE_NAME, "allUsers", updatedUsers);
+          setUsers(updatedUsers);
+        }
+      )
+      .subscribe();
+  
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+  
 
   const filteredUsers = users.filter((user) => {
     const name = user.name || "";
