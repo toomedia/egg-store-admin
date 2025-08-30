@@ -518,11 +518,11 @@
 // export default page;
 
 
-
 "use client"
 import React, { useEffect, useState } from 'react';
 import {supabase} from "../../../utils/supabaseClient"
-import {  ArrowLeft, 
+import {  
+  ArrowLeft, 
   PlusCircle, 
   Image as ImageIcon,
   Tag,
@@ -537,23 +537,69 @@ import {  ArrowLeft,
   Loader2
 } from "lucide-react"
 
-const page = () => {
+// Define TypeScript interfaces
+interface PresetName {
+  en_name: string;
+  de_name: string;
+}
+
+interface PresetDesc {
+  en_desc: string;
+  de_desc: string;
+}
+
+interface PresetSize {
+  label: string;
+  value: string | number;
+}
+
+interface PresetImage {
+  fileObject: File;
+  previewUrl: string;
+}
+
+interface Preset {
+  id: string;
+  preset_name: PresetName;
+  preset_desc: PresetDesc;
+  category: string;
+  filters: string[];
+  preset_size_json: PresetSize;
+  preset_price: string;
+  preset_images: string[];
+  created_at: string;
+}
+
+interface FormData {
+  titleEn: string;
+  titleDe: string;
+  descEn: string;
+  descDe: string;
+  category: string;
+  filters: string[];
+  size: PresetSize;
+  price: string;
+  images: PresetImage[];
+}
+
+const Page = () => {
   const [currentView, setCurrentView] = useState<'list' | 'create'>('list');
-  const [preset, setPreset] = useState<any[]>([])
+  const [preset, setPreset] = useState<Preset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const categories = ['Nature', 'Abstract', 'Easter', 'Animals', 'Holiday'];
 
   // Form state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     titleEn: '', 
     titleDe: '', 
     descEn: '', 
     descDe: '', 
     category: '', 
-    filters: [] as string[], 
-    size: { label: '', value: '' as string | number }, 
+    filters: [], 
+    size: { label: '', value: '' }, 
     price: '', 
-    images: [] as any[] 
+    images: [] 
   });
 
   const sizes = [
@@ -567,22 +613,26 @@ const page = () => {
   
   const filters = ['Floral', 'Geometric', 'Minimalist', 'Colorful', 'Vintage'];
 
-  useEffect(()=>{
-    const fetchPreset = async () =>{
+  useEffect(() => {
+    const fetchPreset = async () => {
       const { data, error } = await supabase
         .from('presets')
         .select('*');
 
-      if(error){console.log("error", error); return}
-      console.log("data", data);
-
-      setPreset(data)
+      if (error) {
+        console.log("error", error); 
+        return;
+      }
+      
+      if (data) {
+        setPreset(data as Preset[]);
+      }
     }
-    fetchPreset()
-  },[currentView])
+    fetchPreset();
+  }, [currentView]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, type } = e.target;
+    const { name, type, value } = e.target;
   
     if (type === "file") {
       const files = (e.target as HTMLInputElement).files;
@@ -598,7 +648,6 @@ const page = () => {
         [name]: imageObjects, 
       }));
     } else {
-      const { value } = e.target;
       setFormData((prev) => ({
         ...prev,
         [name]: value,
@@ -620,11 +669,13 @@ const page = () => {
     e.preventDefault();
     if (formData.images.length === 0) {
       alert("Please upload at least one image.");
+      setIsLoading(false);
       return;
     }
   
-    if(formData.images.length !== parseInt(String(formData.size.value))) {
+    if (formData.images.length !== parseInt(String(formData.size.value))) {
       alert("Please upload the correct number of images for the selected size.");
+      setIsLoading(false);
       return;
     }
   
@@ -644,6 +695,7 @@ const page = () => {
         if (uploadError) {
           console.error("Image upload error:", uploadError);
           formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
+          setIsLoading(false);
           return;
         }
   
@@ -678,6 +730,7 @@ const page = () => {
   
       if (error) {
         console.error("Preset save error:", error);
+        setIsLoading(false);
         return;
       }
   
@@ -688,24 +741,58 @@ const page = () => {
     } catch (err) {
       console.error("Unexpected error:", err);
       formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
-    }finally{
+    } finally {
       setIsLoading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this preset?")) {
+    if (!confirm("Are you sure you want to delete this preset?")) {
+      return;
+    }
+
+    setDeletingId(id);
+    
+    try {
+      // First delete associated images from storage if they exist
+      const presetToDelete = preset.find(item => item.id === id);
+      if (presetToDelete && (presetToDelete.preset_images ?? []).length > 0) {
+        const imagePaths = (presetToDelete.preset_images ?? []).map(url => {
+          const urlParts = url.split('/');
+          return `presets/${urlParts[urlParts.length - 1]}`;
+        });
+
+        const { error: storageError } = await supabase.storage
+          .from('presets')
+          .remove(imagePaths);
+
+        if (storageError) {
+          console.error("Image deletion error:", storageError);
+          // Continue with preset deletion even if image deletion fails
+        }
+      }
+
+      // Delete the preset record from the database
       const { error } = await supabase
         .from('presets')
         .delete()
         .eq('id', id);
-      
+
       if (error) {
         console.error("Delete error:", error);
+        alert("Failed to delete preset. Please try again.");
         return;
       }
-      
-      setPreset(preset.filter(item => item.id !== id));
+
+      // Update local state by filtering out the deleted preset
+      setPreset(prevPreset => prevPreset.filter(item => item.id !== id));
+      alert("Preset deleted successfully!");
+
+    } catch (err) {
+      console.error("Unexpected error during deletion:", err);
+      alert("An unexpected error occurred. Please try again.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -731,7 +818,7 @@ const page = () => {
     return (
       <div className="container mx-auto px-4 py-8 font-manrope">
         <div 
-          onClick={()=> setCurrentView('list')} 
+          onClick={() => setCurrentView('list')} 
           className="mb-4 cursor-pointer flex items-center text-[#e6d281] hover:text-[#d4c070] transition-colors"
         >
           <ArrowLeft className="mr-2" />
@@ -762,6 +849,7 @@ const page = () => {
                   type="text" 
                   id="title-en" 
                   name="titleEn" 
+                  value={formData.titleEn}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
                   placeholder="Spring Flowers Collection" 
                 />
@@ -774,6 +862,7 @@ const page = () => {
                   type="text" 
                   id="title-de" 
                   name="titleDe" 
+                  value={formData.titleDe}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
                   placeholder="Frühlingsblumen Kollektion" 
                 />
@@ -796,6 +885,7 @@ const page = () => {
                   id="desc-en" 
                   name="descEn" 
                   rows={3} 
+                  value={formData.descEn}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
                   placeholder="A beautiful collection of spring flower designs for your egg memory game."
                 ></textarea>
@@ -808,6 +898,7 @@ const page = () => {
                   id="desc-de" 
                   name="descDe" 
                   rows={3} 
+                  value={formData.descDe}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
                   placeholder="Eine wunderschöne Kollektion von Frühlingsblumen-Designs für Ihr Eier-Memory-Spiel."
                 ></textarea>
@@ -829,6 +920,7 @@ const page = () => {
                   onChange={handleInputChange} 
                   id="category" 
                   name="category" 
+                  value={formData.category}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
                 >
                   <option value="">Select a category</option>
@@ -877,10 +969,11 @@ const page = () => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        if (e.currentTarget.value.trim() && !formData.filters.includes(e.currentTarget.value.trim())) {
+                        const value = e.currentTarget.value.trim();
+                        if (value && !formData.filters.includes(value)) {
                           setFormData((prev) => ({
                             ...prev,
-                            filters: [...prev.filters, e.currentTarget.value.trim()],
+                            filters: [...prev.filters, value],
                           }));
                         }
                         e.currentTarget.value = '';
@@ -906,6 +999,7 @@ const page = () => {
                 <div className="relative">
                   <select
                     name="size"
+                    value={formData.size.value}
                     onChange={(e) => {
                       const selectedValue = e.target.value;
                       const selectedSize = sizes.find(s => s.value.toString() === selectedValue);
@@ -937,6 +1031,7 @@ const page = () => {
                     type="number" 
                     id="price" 
                     name="price" 
+                    value={formData.price}
                     step="0.01" 
                     min="0" 
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] pl-8" 
@@ -957,7 +1052,7 @@ const page = () => {
             
             <div 
               className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-[#e6d281] transition-colors cursor-pointer"
-              onClick={()=>{
+              onClick={() => {
                 if(!formData.size.value){
                   alert("Please select a size first"); 
                   return;
@@ -1047,10 +1142,15 @@ const page = () => {
             </button>
             <button 
               type="submit"
-              className="px-4 py-2 border border-transparent rounded-md text-sm font-medium bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 cursor-pointer transition-colors flex items-center justify-center"
+              disabled={isLoading}
+              className="px-4 py-2 border border-transparent rounded-md text-sm font-medium bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 cursor-pointer transition-colors flex items-center justify-center disabled:opacity-50"
             >
-              <PlusCircle className="mr-2" size={16} />
-              Create Preset
+              {isLoading ? (
+                <Loader2 className="mr-2 animate-spin" size={16} />
+              ) : (
+                <PlusCircle className="mr-2" size={16} />
+              )}
+              {isLoading ? 'Creating...' : 'Create Preset'}
             </button>
           </div>
         </form>
@@ -1116,10 +1216,15 @@ const page = () => {
                           </button>
                           <button 
                             onClick={() => handleDelete(item.id)} 
-                            className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-sm font-medium flex items-center"
+                            disabled={deletingId === item.id}
+                            className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-sm font-medium flex items-center disabled:opacity-50"
                           >
-                            <Trash2 className="mr-1" size={14} />
-                            Delete
+                            {deletingId === item.id ? (
+                              <Loader2 className="mr-1 animate-spin" size={14} />
+                            ) : (
+                              <Trash2 className="mr-1" size={14} />
+                            )}
+                            {deletingId === item.id ? 'Deleting...' : 'Delete'}
                           </button>
                         </div>
                         <div className="flex flex-col md:items-end gap-2">
@@ -1246,4 +1351,4 @@ const page = () => {
   );
 };
 
-export default page;
+export default Page;
