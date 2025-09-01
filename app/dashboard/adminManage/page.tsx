@@ -1,3 +1,4 @@
+
 "use client"
 import React, { useState, useEffect } from 'react';
 import { supabase } from "../../../utils/supabaseClient";
@@ -48,14 +49,15 @@ const AdminManager = () => {
   const [notification, setNotification] = useState<{type: string, message: string} | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('viewer');
+  const [inviteRole, setInviteRole] = useState('admin');
   
   const itemsPerPage = 10;
-  const roles = ['admin', 'editor', 'viewer'];
+  const roles = ['admin']; // Only admin role available
   const statuses = ['active', 'inactive', 'pending'];
 
   // Show notification and auto-hide after 5 seconds
   const showNotification = (type: string, message: string) => {
+    console.log(`Notification: ${type} - ${message}`);
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 5000);
   };
@@ -91,7 +93,7 @@ const AdminManager = () => {
         avatar_url: user.avatar_url || null
       }));
       
-      console.log(`Successfully fetched ${usersWithDefaults.length} users`);
+      console.log(`Successfully fetched ${usersWithDefaults.length} users`, usersWithDefaults);
       setUsers(usersWithDefaults);
     } catch (error) {
       console.error('Error in fetchUsers:', error);
@@ -127,6 +129,8 @@ const AdminManager = () => {
   };
 
   const handleRoleChange = async (userId: string, newRole: string) => {
+    if (newRole === '') return; // Don't do anything if "Select Role" is chosen
+    
     console.log(`Changing role for user ${userId} to ${newRole}`);
     try {
       const { error } = await supabase
@@ -234,15 +238,8 @@ const AdminManager = () => {
     }
     
     try {
-      console.log("Deleting user from authentication service...");
-      const { error: authError } = await supabase.auth.admin.deleteUser(userId);
-      if (authError) {
-        console.error('Error deleting user from auth:', authError);
-        showNotification('error', `Failed to delete user: ${authError.message}`);
-        throw authError;
-      }
-      
-      console.log("Deleting user from database...");
+      console.log("Deleting user from database first...");
+      // First delete from database
       const { error } = await supabase
         .from('users')
         .delete()
@@ -254,13 +251,28 @@ const AdminManager = () => {
         throw error;
       }
 
-      console.log(`Successfully deleted user ${userId}`);
+      console.log("Now attempting to delete user from authentication service...");
+      // Then try to delete from auth (but handle potential errors gracefully)
+      try {
+        const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+        if (authError) {
+          console.warn('Note: Could not delete user from auth (may not exist or insufficient permissions):', authError);
+          // We'll still proceed since the database record was deleted
+        } else {
+          console.log("Successfully deleted user from auth service");
+        }
+      } catch (authError) {
+        console.warn('Auth deletion failed, but continuing since database record was deleted:', authError);
+      }
+
+      console.log(`Successfully deleted user ${userId} from database`);
       showNotification('success', 'User deleted successfully');
       
       setUsers(prev => prev.filter(user => user.id !== userId));
       setSelectedUsers(prev => prev.filter(id => id !== userId));
     } catch (error) {
       console.error('Error in handleDeleteUser:', error);
+      showNotification('error', 'Failed to delete user');
     }
   };
 
@@ -278,11 +290,19 @@ const AdminManager = () => {
       for (const userId of selectedUsers) {
         try {
           console.log(`Deleting user ${userId}...`);
-          await supabase.auth.admin.deleteUser(userId);
+          // First delete from database
           await supabase
             .from('users')
             .delete()
             .eq('id', userId);
+          
+          // Then try to delete from auth (but don't fail if it doesn't work)
+          try {
+            await supabase.auth.admin.deleteUser(userId);
+          } catch (authError) {
+            console.warn(`Could not delete user ${userId} from auth:`, authError);
+          }
+          
           successCount++;
         } catch (error) {
           console.error(`Error deleting user ${userId}:`, error);
@@ -307,61 +327,86 @@ const AdminManager = () => {
   };
 
   const handleSendInvite = async (email: string, role: string) => {
-  // Email validation
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    showNotification('error', 'Please enter a valid email address');
-    return;
-  }
-  
-  setIsSendingInvite(true);
-  
-  try {
-    // 1. Check if user exists
-    const { data: existingUsers, error: checkError } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('email', email);
-      
-    if (checkError) throw checkError;
+    console.log(`Sending invite to: ${email} with role: ${role}`);
     
-    if (existingUsers && existingUsers.length > 0) {
-      showNotification('warning', 'User with this email already exists');
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      console.log('Invalid email format');
+      showNotification('error', 'Please enter a valid email address');
       return;
     }
     
-    // 2. Create user in database
-    const { data: newUser, error: dbError } = await supabase
-      .from('users')
-      .insert({
-        email,
-        status: 'pending',
-        role: role
-      })
-      .select()
-      .single();
+    setIsSendingInvite(true);
+    
+    try {
+      console.log("Step 1: Checking if user already exists...");
+      // 1. Check if user exists
+      const { data: existingUsers, error: checkError } = await supabase
+        .from('users')
+        .select('id, email')
+        .eq('email', email);
+        
+      if (checkError) {
+        console.error('Error checking existing users:', checkError);
+        throw checkError;
+      }
+      
+      if (existingUsers && existingUsers.length > 0) {
+        console.log('User already exists with this email');
+        showNotification('warning', 'User with this email already exists');
+        return;
+      }
+      
+      console.log("Step 2: Creating user in database...");
+      // 2. Create user in database
+      const { data: newUser, error: dbError } = await supabase
+        .from('users')
+        .insert({
+          email,
+          status: 'pending',
+          role: role
+        })
+        .select()
+        .single();
 
-    if (dbError) throw dbError;
+      if (dbError) {
+        console.error('Error creating user in database:', dbError);
+        throw dbError;
+      }
 
-    // 3. Send invitation (NO SMTP NEEDED)
-    const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
-      data: { role: role }
-    });
+      console.log("Step 3: Sending invitation email...");
+      // 3. Send invitation (NO SMTP NEEDED)
+      const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
+        data: { role: role }
+      });
 
-    if (inviteError) throw inviteError;
+      if (inviteError) {
+        console.error('Error sending invitation:', inviteError);
+        
+        // Even if invite fails, we'll keep the user record but show a warning
+        showNotification('warning', 'User created but invitation failed to send');
+        setUsers(prev => [newUser, ...prev]);
+        setShowInviteModal(false);
+        setInviteEmail('');
+        setInviteRole('admin');
+        return;
+      }
 
-    // 4. Success
-    showNotification('success', 'Invitation sent successfully!');
-    setUsers(prev => [newUser, ...prev]);
-    setShowInviteModal(false);
-    setInviteEmail('');
-    setInviteRole('viewer');
-  } catch (error: any) {
-    showNotification('error', error.message || 'Failed to send invitation');
-  } finally {
-    setIsSendingInvite(false);
-  }
-};
+      console.log("Step 4: Success! Invitation sent");
+      // 4. Success
+      showNotification('success', 'Invitation sent successfully!');
+      setUsers(prev => [newUser, ...prev]);
+      setShowInviteModal(false);
+      setInviteEmail('');
+      setInviteRole('admin');
+    } catch (error: any) {
+      console.error('Error in handleSendInvite:', error);
+      showNotification('error', error.message || 'Failed to send invitation');
+    } finally {
+      setIsSendingInvite(false);
+    }
+  };
 
   const handleSaveEdit = async () => {
     if (!editUser) {
@@ -369,7 +414,7 @@ const AdminManager = () => {
       return;
     }
     
-    console.log(`Saving edits for user ${editUser.id}`);
+    console.log(`Saving edits for user ${editUser.id}`, editUser);
     
     try {
       const { error } = await supabase
@@ -431,14 +476,17 @@ const AdminManager = () => {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-1 flex items-center">
               <Shield className="text-[#e6d281] mr-2" size={24} />
-              Admin Manager
+              User Manager
             </h1>
             <p className="text-gray-600">Manage user accounts and permissions</p>
           </div>
           <div className="flex gap-3">
             <button 
               className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
-              onClick={() => setShowInviteModal(true)}
+              onClick={() => {
+                console.log("Opening invite modal");
+                setShowInviteModal(true);
+              }}
               disabled={isSendingInvite}
             >
               {isSendingInvite ? (
@@ -454,14 +502,15 @@ const AdminManager = () => {
 
       {/* Invite Modal */}
       {showInviteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+   <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">Invite User</h3>
               <button onClick={() => {
+                console.log("Closing invite modal");
                 setShowInviteModal(false);
                 setInviteEmail('');
-                setInviteRole('viewer');
+                setInviteRole('admin');
               }}>
                 <XCircle className="text-gray-500 hover:text-gray-700" />
               </button>
@@ -474,7 +523,10 @@ const AdminManager = () => {
                   type="email"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
+                  onChange={(e) => {
+                    console.log("Invite email changed:", e.target.value);
+                    setInviteEmail(e.target.value);
+                  }}
                   placeholder="user@example.com"
                 />
               </div>
@@ -484,11 +536,12 @@ const AdminManager = () => {
                 <select
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value)}
+                  onChange={(e) => {
+                    console.log("Invite role changed:", e.target.value);
+                    setInviteRole(e.target.value);
+                  }}
                 >
-                  {roles.map(role => (
-                    <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1)}</option>
-                  ))}
+                  <option value="admin">Admin</option>
                 </select>
               </div>
               
@@ -496,16 +549,20 @@ const AdminManager = () => {
                 <button
                   className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                   onClick={() => {
+                    console.log("Cancelling invite");
                     setShowInviteModal(false);
                     setInviteEmail('');
-                    setInviteRole('viewer');
+                    setInviteRole('admin');
                   }}
                 >
                   Cancel
                 </button>
                 <button
                   className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-md flex items-center"
-                  onClick={() => handleSendInvite(inviteEmail, inviteRole)}
+                  onClick={() => {
+                    console.log("Sending invite to:", inviteEmail);
+                    handleSendInvite(inviteEmail, inviteRole);
+                  }}
                   disabled={isSendingInvite || !inviteEmail}
                 >
                   {isSendingInvite ? (
@@ -533,6 +590,7 @@ const AdminManager = () => {
               className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
               value={searchQuery}
               onChange={(e) => {
+                console.log("Search query changed:", e.target.value);
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
@@ -547,6 +605,7 @@ const AdminManager = () => {
               className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
               value={roleFilter}
               onChange={(e) => {
+                console.log("Role filter changed:", e.target.value);
                 setRoleFilter(e.target.value);
                 setCurrentPage(1);
               }}
@@ -567,6 +626,7 @@ const AdminManager = () => {
               className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
               value={statusFilter}
               onChange={(e) => {
+                console.log("Status filter changed:", e.target.value);
                 setStatusFilter(e.target.value);
                 setCurrentPage(1);
               }}
@@ -583,7 +643,10 @@ const AdminManager = () => {
               <span className="text-sm font-medium">{selectedUsers.length} selected</span>
               <button 
                 className="px-3 py-1.5 bg-red-100 text-red-600 rounded-md text-sm font-medium flex items-center hover:bg-red-200"
-                onClick={handleBulkDelete}
+                onClick={() => {
+                  console.log("Bulk delete initiated for:", selectedUsers.length, "users");
+                  handleBulkDelete();
+                }}
               >
                 <Trash2 className="mr-1" size={14} />
                 Delete
@@ -593,11 +656,14 @@ const AdminManager = () => {
         </div>
       </div>
       {isEditing && editUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-transparent bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">Edit User</h3>
-              <button onClick={() => setIsEditing(false)}>
+              <button onClick={() => {
+                console.log("Closing edit modal");
+                setIsEditing(false);
+              }}>
                 <XCircle className="text-gray-500 hover:text-gray-700" />
               </button>
             </div>
@@ -609,7 +675,10 @@ const AdminManager = () => {
                   type="text"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   value={editUser.name || ''}
-                  onChange={(e) => setEditUser({...editUser, name: e.target.value})}
+                  onChange={(e) => {
+                    console.log("Edit user name changed:", e.target.value);
+                    setEditUser({...editUser, name: e.target.value});
+                  }}
                 />
               </div>
               
@@ -618,11 +687,12 @@ const AdminManager = () => {
                 <select
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   value={editUser.role}
-                  onChange={(e) => setEditUser({...editUser, role: e.target.value})}
+                  onChange={(e) => {
+                    console.log("Edit user role changed:", e.target.value);
+                    setEditUser({...editUser, role: e.target.value});
+                  }}
                 >
-                  {roles.map(role => (
-                    <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1)}</option>
-                  ))}
+                  <option value="admin">Admin</option>
                 </select>
               </div>
               
@@ -631,7 +701,10 @@ const AdminManager = () => {
                 <select
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   value={editUser.status}
-                  onChange={(e) => setEditUser({...editUser, status: e.target.value})}
+                  onChange={(e) => {
+                    console.log("Edit user status changed:", e.target.value);
+                    setEditUser({...editUser, status: e.target.value});
+                  }}
                 >
                   {statuses.map(status => (
                     <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>
@@ -642,13 +715,19 @@ const AdminManager = () => {
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                  onClick={() => setIsEditing(false)}
+                  onClick={() => {
+                    console.log("Cancelling edit");
+                    setIsEditing(false);
+                  }}
                 >
                   Cancel
                 </button>
                 <button
                   className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-md"
-                  onClick={handleSaveEdit}
+                  onClick={() => {
+                    console.log("Saving edits");
+                    handleSaveEdit();
+                  }}
                 >
                   Save Changes
                 </button>
@@ -663,7 +742,6 @@ const AdminManager = () => {
             <div className="animate-pulse flex flex-col items-center">
               <Users className="text-gray-300 mb-4" size={32} />
               <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
             </div>
           </div>
         ) : filteredUsers.length === 0 ? (
@@ -687,8 +765,10 @@ const AdminManager = () => {
                         checked={selectedUsers.length === currentItems.length && currentItems.length > 0}
                         onChange={(e) => {
                           if (e.target.checked) {
+                            console.log("Selecting all users on current page");
                             setSelectedUsers(currentItems.map(user => user.id));
                           } else {
+                            console.log("Deselecting all users");
                             setSelectedUsers([]);
                           }
                         }}
@@ -724,8 +804,10 @@ const AdminManager = () => {
                           checked={selectedUsers.includes(user.id)}
                           onChange={(e) => {
                             if (e.target.checked) {
+                              console.log("Selecting user:", user.id);
                               setSelectedUsers([...selectedUsers, user.id]);
                             } else {
+                              console.log("Deselecting user:", user.id);
                               setSelectedUsers(selectedUsers.filter(id => id !== user.id));
                             }
                           }}
@@ -752,19 +834,15 @@ const AdminManager = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <select
-                          className={`text-sm ${user.role === 'admin' ? 'text-red-600' : user.role === 'editor' ? 'text-blue-600' : 'text-gray-600'} bg-transparent border-none focus:ring-1 focus:ring-[#e6d281] rounded`}
-                          value={user.role || 'viewer'}
-                          onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                          className={`text-sm ${user.role === 'admin' ? 'text-red-600' : 'text-gray-600'} bg-transparent border-none focus:ring-1 focus:ring-[#e6d281] rounded`}
+                          value={user.role || ''}
+                          onChange={(e) => {
+                            console.log(`Changing role for user ${user.id} to:`, e.target.value);
+                            handleRoleChange(user.id, e.target.value);
+                          }}
                         >
-                          {roles.map(role => (
-                            <option 
-                              key={role} 
-                              value={role}
-                              className={role === 'admin' ? 'text-red-600' : role === 'editor' ? 'text-blue-600' : 'text-gray-600'}
-                            >
-                              {role.charAt(0).toUpperCase() + role.slice(1)}
-                            </option>
-                          ))}
+                          <option value="">Select Role</option>
+                          <option value="admin">Admin</option>
                         </select>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -793,6 +871,7 @@ const AdminManager = () => {
                           <button
                             className="text-gray-600 hover:text-[#e6d281] p-1"
                             onClick={() => {
+                              console.log("Editing user:", user.id);
                               setEditUser(user);
                               setIsEditing(true);
                             }}
@@ -802,7 +881,10 @@ const AdminManager = () => {
                           {user.status === 'active' ? (
                             <button
                               className="text-gray-600 hover:text-orange-500 p-1"
-                              onClick={() => handleDeactivateUser(user.id)}
+                              onClick={() => {
+                                console.log("Deactivating user:", user.id);
+                                handleDeactivateUser(user.id);
+                              }}
                               title="Deactivate user"
                             >
                               <Lock size={16} />
@@ -810,7 +892,10 @@ const AdminManager = () => {
                           ) : (
                             <button
                               className="text-gray-600 hover:text-green-500 p-1"
-                              onClick={() => handleActivateUser(user.id)}
+                              onClick={() => {
+                                console.log("Activating user:", user.id);
+                                handleActivateUser(user.id);
+                              }}
                               title="Activate user"
                             >
                               <Unlock size={16} />
@@ -818,14 +903,20 @@ const AdminManager = () => {
                           )}
                           <button
                             className="text-gray-600 hover:text-red-500 p-1"
-                            onClick={() => handleDeleteUser(user.id)}
+                            onClick={() => {
+                              console.log("Deleting user:", user.id);
+                              handleDeleteUser(user.id);
+                            }}
                           >
                             <Trash2 size={16} />
                           </button>
                           {user.status === 'pending' && (
                             <button
                               className="text-gray-600 hover:text-green-500 p-1"
-                              onClick={() => handleSendInvite(user.email, user.role)}
+                              onClick={() => {
+                                console.log("Resending invite to:", user.email);
+                                handleSendInvite(user.email, user.role);
+                              }}
                               title="Resend invite"
                             >
                               <Mail size={16} />
@@ -842,14 +933,20 @@ const AdminManager = () => {
               <div className="border-t border-gray-200 px-4 py-3 flex items-center justify-between sm:px-6">
                 <div className="flex-1 flex justify-between sm:hidden">
                   <button
-                    onClick={() => handlePageChange(currentPage - 1)}
+                    onClick={() => {
+                      console.log("Previous page");
+                      handlePageChange(currentPage - 1);
+                    }}
                     disabled={currentPage === 1}
                     className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                   >
                     Previous
                   </button>
                   <button
-                    onClick={() => handlePageChange(currentPage + 1)}
+                    onClick={() => {
+                      console.log("Next page");
+                      handlePageChange(currentPage + 1);
+                    }}
                     disabled={currentPage === totalPages}
                     className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                   >
@@ -858,6 +955,7 @@ const AdminManager = () => {
                 </div>
                 <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                   <div>
+                  
                     <p className="text-sm text-gray-700">
                       Showing <span className="font-medium">{indexOfFirstItem + 1}</span> to{' '}
                       <span className="font-medium">{Math.min(indexOfLastItem, filteredUsers.length)}</span> of{' '}
