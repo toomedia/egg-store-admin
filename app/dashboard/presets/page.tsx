@@ -34,8 +34,10 @@ interface PresetSize {
 }
 
 interface PresetImage {
-  fileObject: File;
+  fileObject: File | null;
   previewUrl: string;
+  isExisting?: boolean;
+  originalUrl?: string;
 }
 
 interface Preset {
@@ -67,6 +69,7 @@ const Page = () => {
   const [preset, setPreset] = useState<Preset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const categories = ['Nature', 'Abstract', 'Easter', 'Animals', 'Holiday'];
 
   // Form state
@@ -138,6 +141,33 @@ const Page = () => {
             payload.new
           ];
           localStorage.setItem('allPresets', JSON.stringify(updatedPresets));
+          setPreset(updatedPresets);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'presets' },
+        payload => {
+          console.log('🚀 Preset updated:', payload.new);
+  
+          const storedPresets = JSON.parse(localStorage.getItem('allPresets') || '[]');
+          const updatedPresets = storedPresets.map((item: any) => 
+            item.id === payload.new.id ? payload.new : item
+          );
+          localStorage.setItem('allPresets', JSON.stringify(updatedPresets));
+          setPreset(updatedPresets);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'presets' },
+        payload => {
+          console.log('🚀 Preset deleted:', payload.old);
+  
+          const storedPresets = JSON.parse(localStorage.getItem('allPresets') || '[]');
+          const updatedPresets = storedPresets.filter((item: any) => item.id !== payload.old.id);
+          localStorage.setItem('allPresets', JSON.stringify(updatedPresets));
+          setPreset(updatedPresets);
         }
       )
       .subscribe();
@@ -182,9 +212,10 @@ const Page = () => {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
     setIsLoading(true);
     e.preventDefault();
+    
     if (formData.images.length === 0) {
       alert("Please upload at least one image.");
       setIsLoading(false);
@@ -199,65 +230,158 @@ const Page = () => {
   
     try {
       const uploadedImageUrls: string[] = [];
-  
+
       for (let image of formData.images) {
-        const file = image.fileObject;
-        const fileExt = file.name.split(".").pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `presets/${fileName}`;
-  
-        let { error: uploadError } = await supabase.storage
-          .from("presets")
-          .upload(filePath, file);
-  
-        if (uploadError) {
-          console.error("Image upload error:", uploadError);
-          formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
-          setIsLoading(false);
-          return;
+        if (image.isExisting && image.originalUrl) {
+          // Keep existing image URL
+          uploadedImageUrls.push(image.originalUrl);
+        } else if (image.fileObject) {
+          // Upload new image
+          const file = image.fileObject;
+          const fileExt = file.name.split(".").pop();
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+          const filePath = `presets/${fileName}`;
+
+          let { error: uploadError } = await supabase.storage
+            .from("presets")
+            .upload(filePath, file);
+
+          if (uploadError) {
+            console.error("Image upload error:", uploadError);
+            formData.images.forEach(img => {
+              if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          const { data: publicUrlData } = supabase.storage
+            .from("presets")
+            .getPublicUrl(filePath);
+
+          uploadedImageUrls.push(publicUrlData.publicUrl);
         }
-  
-        const { data: publicUrlData } = supabase.storage
-          .from("presets")
-          .getPublicUrl(filePath);
-  
-        uploadedImageUrls.push(publicUrlData.publicUrl);
       }
   
       formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
   
-      const { data, error } = await supabase
-        .from("presets")
-        .insert({
-          preset_name: {
-            en_name: formData.titleEn,
-            de_name: formData.titleDe,
-          },
-          preset_desc: {
-            en_desc: formData.descEn,
-            de_desc: formData.descDe,
-          },
-          category: formData.category,
-          filters: formData.filters,
-          preset_size_json: {
-            ...formData.size,
-            price: parseFloat(formData.price) // Store price as number in size_json
-          },
-          preset_price: formData.price, // Store price as string in main price field
-          preset_images: uploadedImageUrls, 
-        })
-        .select("*")
-        .single();
+      let data: any = null;
+      let error: any = null;
+      
+      if (editingId) {
+        // First verify the preset exists
+        const { data: existingPreset, error: checkError } = await supabase
+          .from("presets")
+          .select("id")
+          .eq("id", editingId)
+          .single();
+        
+        if (checkError || !existingPreset) {
+          error = { message: 'Preset not found. It may have been deleted.' };
+        } else {
+          // Update existing preset
+          const { data: updateData, error: updateError } = await supabase
+            .from("presets")
+            .update({
+              preset_name: {
+                en_name: formData.titleEn,
+                de_name: formData.titleDe,
+              },
+              preset_desc: {
+                en_desc: formData.descEn,
+                de_desc: formData.descDe,
+              },
+              category: formData.category,
+              filters: formData.filters,
+              preset_size_json: {
+                ...formData.size,
+                price: parseFloat(formData.price)
+              },
+              preset_price: formData.price,
+              preset_images: uploadedImageUrls,
+            })
+            .eq('id', editingId)
+            .select("*");
+          
+          if (updateError) {
+            error = updateError;
+          } else if (!updateData || updateData.length === 0) {
+            error = { message: 'Preset not found or no changes made' };
+          } else {
+            data = updateData[0];
+          }
+        }
+      } else {
+        // Create new preset
+        const { data: insertData, error: insertError } = await supabase
+          .from("presets")
+          .insert({
+            preset_name: {
+              en_name: formData.titleEn,
+              de_name: formData.titleDe,
+            },
+            preset_desc: {
+              en_desc: formData.descEn,
+              de_desc: formData.descDe,
+            },
+            category: formData.category,
+            filters: formData.filters,
+            preset_size_json: {
+              ...formData.size,
+              price: parseFloat(formData.price)
+            },
+            preset_price: formData.price,
+            preset_images: uploadedImageUrls,
+          })
+          .select("*");
+        
+        if (insertError) {
+          error = insertError;
+        } else if (!insertData || insertData.length === 0) {
+          error = { message: 'Failed to create preset' };
+        } else {
+          data = insertData[0];
+        }
+      }
   
       if (error) {
         console.error("Preset save error:", error);
+        console.error("Error details:", {
+          editingId,
+          formData: {
+            titleEn: formData.titleEn,
+            titleDe: formData.titleDe,
+            category: formData.category,
+            size: formData.size,
+            price: formData.price,
+            imageCount: formData.images.length
+          }
+        });
+        alert(`Failed to ${editingId ? 'update' : 'create'} preset: ${error.message}`);
         setIsLoading(false);
         return;
       }
   
-      console.log("Preset created:", data);
-      alert("Preset created successfully!");
+      console.log(editingId ? "Preset updated:" : "Preset created:", data);
+      alert(editingId ? "Preset updated successfully!" : "Preset created successfully!");
+      
+      // Update local state
+      let updatedPresets;
+      if (editingId) {
+        updatedPresets = preset.map(item => 
+          item.id === editingId ? { ...item, ...data } : item
+        );
+        setPreset(updatedPresets);
+      } else {
+        updatedPresets = [...preset, data];
+        setPreset(updatedPresets);
+      }
+      
+      // Update localStorage
+      localStorage.setItem('allPresets', JSON.stringify(updatedPresets));
+      
       setCurrentView("list");
+      setEditingId(null);
   
     } catch (err) {
       console.error("Unexpected error:", err);
@@ -306,7 +430,12 @@ const Page = () => {
       }
 
       // Update local state by filtering out the deleted preset
-      setPreset(prevPreset => prevPreset.filter(item => item.id !== id));
+      const updatedPresets = preset.filter(item => item.id !== id);
+      setPreset(updatedPresets);
+      
+      // Update localStorage
+      localStorage.setItem('allPresets', JSON.stringify(updatedPresets));
+      
       alert("Preset deleted successfully!");
 
     } catch (err) {
@@ -320,6 +449,14 @@ const Page = () => {
   const handleEdit = (id: string) => {
     const presetToEdit = preset.find(item => item.id === id);
     if (presetToEdit) {
+      // Convert existing image URLs to PresetImage format
+      const existingImages = (presetToEdit.preset_images || []).map((imageUrl: string, index: number) => ({
+        fileObject: null, // No file object for existing images
+        previewUrl: imageUrl,
+        isExisting: true, // Flag to identify existing images
+        originalUrl: imageUrl // Keep original URL for reference
+      }));
+      
       setFormData({
         titleEn: presetToEdit.preset_name?.en_name || '',
         titleDe: presetToEdit.preset_name?.de_name || '',
@@ -329,8 +466,9 @@ const Page = () => {
         filters: presetToEdit.filters || [],
         size: presetToEdit.preset_size_json || { value: '', price: 0 },
         price: presetToEdit.preset_price || '',
-        images: []
+        images: existingImages
       });
+      setEditingId(id);
       setCurrentView('create');
     }
   };
@@ -339,7 +477,21 @@ const Page = () => {
     return (
       <div className="container mx-auto px-4 py-8 font-manrope">
         <div 
-          onClick={() => setCurrentView('list')} 
+          onClick={() => {
+            setCurrentView('list');
+            setEditingId(null);
+            setFormData({
+              titleEn: '', 
+              titleDe: '', 
+              descEn: '', 
+              descDe: '', 
+              category: '', 
+              filters: [], 
+              size: { value: '', price: 0 }, 
+              price: '', 
+              images: [] 
+            });
+          }} 
           className="mb-4 cursor-pointer flex items-center text-[#e6d281] hover:text-[#d4c070] transition-colors"
         >
           <ArrowLeft className="mr-2" />
@@ -348,10 +500,21 @@ const Page = () => {
 
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="flex items-center mb-4">
-            <PlusCircle className="text-[#e6d281] mr-2" size={24} />
-            <h1 className="text-2xl font-bold text-gray-800">Create New Preset</h1>
+            {editingId ? (
+              <Edit className="text-[#e6d281] mr-2" size={24} />
+            ) : (
+              <PlusCircle className="text-[#e6d281] mr-2" size={24} />
+            )}
+            <h1 className="text-2xl font-bold text-gray-800">
+              {editingId ? 'Edit Preset' : 'Create New Preset'}
+            </h1>
           </div>
-          <p className="text-gray-600">Fill out the form below to create a new egg card preset.</p>
+          <p className="text-gray-600">
+            {editingId 
+              ? 'Update the preset information below.' 
+              : 'Fill out the form below to create a new egg card preset.'
+            }
+          </p>
         </div>
 
         <form className="space-y-6" onSubmit={handleSubmit}>
@@ -622,6 +785,11 @@ const Page = () => {
                     Selected size requires {formData.size.value} images
                   </p>
                 )}
+                {editingId && (
+                  <p className="text-xs text-blue-600 mt-2">
+                    💡 You can add new images or remove existing ones
+                  </p>
+                )}
               </div>
             </div>
 
@@ -630,6 +798,11 @@ const Page = () => {
                 <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
                   <ImageIcon className="mr-2" size={16} />
                   Selected Images ({formData.images.length}/{formData.size.value || '0'})
+                  {editingId && (
+                    <span className="ml-2 text-xs text-blue-600">
+                      (Existing: {formData.images.filter(img => img.isExisting).length}, New: {formData.images.filter(img => !img.isExisting).length})
+                    </span>
+                  )}
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                   {formData.images.map((image, index) => (
@@ -640,11 +813,18 @@ const Page = () => {
                           alt={`Preview ${index}`} 
                           className="w-full h-full object-cover"
                         />
+                        {image.isExisting && (
+                          <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
+                            Existing
+                          </div>
+                        )}
                       </div>
                       <button
                         type="button"
                         onClick={() => {
-                          URL.revokeObjectURL(image.previewUrl);
+                          if (image.fileObject) {
+                            URL.revokeObjectURL(image.previewUrl);
+                          }
                           setFormData(prev => ({
                             ...prev,
                             images: prev.images.filter((_, i) => i !== index)
@@ -665,7 +845,21 @@ const Page = () => {
           <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
             <button 
               type="button"
-              onClick={() => setCurrentView('list')}
+              onClick={() => {
+                setCurrentView('list');
+                setEditingId(null);
+                setFormData({
+                  titleEn: '', 
+                  titleDe: '', 
+                  descEn: '', 
+                  descDe: '', 
+                  category: '', 
+                  filters: [], 
+                  size: { value: '', price: 0 }, 
+                  price: '', 
+                  images: [] 
+                });
+              }}
               className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 flex items-center justify-center"
             >
               Cancel
@@ -680,7 +874,7 @@ const Page = () => {
               ) : (
                 <PlusCircle className="mr-2" size={16} />
               )}
-              {isLoading ? 'Creating...' : 'Create Preset'}
+              {isLoading ? (editingId ? 'Updating...' : 'Creating...') : (editingId ? 'Update Preset' : 'Create Preset')}
             </button>
           </div>
         </form>
