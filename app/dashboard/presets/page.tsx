@@ -29,8 +29,8 @@ interface PresetDesc {
 }
 
 interface PresetSize {
-  label: string;
   value: string | number;
+  price: number;
 }
 
 interface PresetImage {
@@ -77,18 +77,15 @@ const Page = () => {
     descDe: '', 
     category: '', 
     filters: [], 
-    size: { label: '', value: '' }, 
+    size: { value: '', price: 0 }, 
     price: '', 
     images: [] 
   });
 
   const sizes = [
-    { label: 'sm', value: 12 },
-    { label: 'xs', value: 1 },
-    { label: 'md', value: 18 },
-    { label: 'lg', value: 27 },
-    { label: 'xl', value: 32 },
-    { label: 'xxl', value: 38 },
+    { value: 24, price: 24.90 },
+    { value: 48, price: 29.90 },
+    { value: 72, price: 34.90 },
   ];
   
   const filters = ['Floral', 'Geometric', 'Minimalist', 'Colorful', 'Vintage'];
@@ -242,8 +239,11 @@ const Page = () => {
           },
           category: formData.category,
           filters: formData.filters,
-          preset_size_json: formData.size,
-          preset_price: formData.price,
+          preset_size_json: {
+            ...formData.size,
+            price: parseFloat(formData.price) // Store price as number in size_json
+          },
+          preset_price: formData.price, // Store price as string in main price field
           preset_images: uploadedImageUrls, 
         })
         .select("*")
@@ -327,7 +327,7 @@ const Page = () => {
         descDe: presetToEdit.preset_desc?.de_desc || '',
         category: presetToEdit.category || '',
         filters: presetToEdit.filters || [],
-        size: presetToEdit.preset_size_json || { label: '', value: '' },
+        size: presetToEdit.preset_size_json || { value: '', price: 0 },
         price: presetToEdit.preset_price || '',
         images: []
       });
@@ -518,48 +518,57 @@ const Page = () => {
               <div>
                 <label htmlFor="size" className="block text-sm font-medium text-gray-700 mb-1">Preset Size</label>
                 <div className="relative">
-                  <select
-                    name="size"
-                    value={formData.size.value}
-                    onChange={(e) => {
-                      const selectedValue = e.target.value;
-                      const selectedSize = sizes.find(s => s.value.toString() === selectedValue);
-                      if(selectedSize) {
-                        setFormData(prev => ({
-                          ...prev,
-                          size: selectedSize
-                        }));
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
-                  >
-                    <option value="">Select a size</option>
-                    {sizes.map(({ label, value }) => (
-                      <option key={label} value={value}>
-                        {label.toUpperCase()} ({value} cards)
-                      </option>
-                    ))}
-                  </select>
+                <select
+                name="size"
+                value={formData.size?.value || ""}
+                onChange={(e) => {
+                  const selectedValue = e.target.value;
+                  const selectedSize = sizes.find(
+                    (s) => s.value.toString() === selectedValue
+                  );
+                  if (selectedSize) {
+                    setFormData((prev) => ({
+                      ...prev,
+                      size: selectedSize,
+                      price: selectedSize.price.toFixed(2),
+                    }));
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
+              >
+                <option value="">Select a size</option>
+                {sizes.map(({ value, price }) => (
+                  <option key={value} value={value}>
+                    {value} cards - €{price.toFixed(2)}
+                  </option>
+                ))}
+              </select>
+
                   <ChevronDown className="absolute right-3 top-3 text-gray-400" size={16} />
                 </div>
               </div>
               <div>
-                <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">Price (€)</label>
+                <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
+                  Price (€) - Auto-calculated
+                </label>
                 <div className="relative">
                   <input 
                     required 
-                    onChange={handleInputChange} 
+                    readOnly
                     type="number" 
                     id="price" 
                     name="price" 
                     value={formData.price}
                     step="0.01" 
                     min="0" 
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] pl-8" 
-                    placeholder="19.99" 
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700 cursor-not-allowed focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] pl-8" 
+                    placeholder="Select size to see price" 
                   />
                   <DollarSign className="absolute left-3 top-3 text-gray-400" size={16} />
                 </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Price is automatically calculated based on the selected size
+                </p>
               </div>
             </div>
           </div>
@@ -755,7 +764,7 @@ const Page = () => {
                           <div className="bg-gray-100 px-3 py-2 rounded-lg text-center">
                             <p className="text-xs text-gray-500 flex items-center justify-center">
                               <Layers className="mr-1" size={12} />
-                              {item.preset_size_json?.label || 'N/A'} ({item.preset_size_json?.value || '0'} cards)
+                              {item.preset_size_json?.value || 'N/A'} cards
                             </p>
                           </div>
                         </div>
