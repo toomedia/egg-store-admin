@@ -36,9 +36,9 @@ export default function page() {
         .from('users')
         .select('*')
         .eq('email', email)
-        .eq('name', name)
-        .eq('isAdmin', true)
         .maybeSingle();
+        
+        console.log("🚀 ~ handleLogin ~ userData:", userData)
         
         console.log("🚀 ~ handleLogin ~ userData:", userData, userError)
         if (userError || !userData) {
