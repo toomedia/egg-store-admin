@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ShieldCheck,
   ShieldOff,
+  RefreshCw,
 } from "lucide-react";
 import { getItem, setItem } from "@/utils/indexedDB";
 
@@ -17,6 +18,7 @@ const UsersPage = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [lastSync, setLastSync] = useState<Date | null>(null);
 
   useEffect(() => {
     const DB_NAME = "egg-store-db";
@@ -24,62 +26,109 @@ const UsersPage = () => {
   
     const fetchAllUsers = async () => {
       try {
-        // ✅ IndexedDB check
         let allUsers: any[] = [];
-        
+        let dataSource = "IndexedDB";
         try {
           const storedUsers = await getItem(DB_NAME, STORE_NAME, "allUsers");
+          const storedTimestamp = await getItem(DB_NAME, STORE_NAME, "lastSyncTime");
+          
           allUsers = Array.isArray(storedUsers) ? storedUsers : [];
-        } catch (indexedDBError) {
-          console.warn("IndexedDB not available, fetching from Supabase directly:", indexedDBError);
-        }
-  
-        if (allUsers.length > 0) {
-          console.log("🚀 Loaded users from IndexedDB:", allUsers);
-        } else {
-          const { data, error } = await supabase.from("users").select("*");
-          if (error) {
-            console.error("🚀 Error fetching users:", error);
+          
+          if (storedTimestamp) {
+            setLastSync(new Date(storedTimestamp));
+          }
+          
+          if (allUsers.length > 0) {
+            console.log("Data fetched from: IndexedDB");
+            setUsers(allUsers);
             setLoading(false);
+            
+            checkForSupabaseUpdates();
             return;
           }
-          allUsers = data || [];
-          
-          try {
-            await setItem(DB_NAME, STORE_NAME, "allUsers", allUsers);
-          } catch (indexedDBError) {
-            console.warn("Could not save to IndexedDB:", indexedDBError);
-          }
-          
-          console.log("🚀 Fetched users from Supabase:", allUsers);
+        } catch (indexedDBError) {
+        }
+        
+        const { data, error } = await supabase.from("users").select("*").order('created_at', { ascending: false });
+        
+        if (error) {
+          setLoading(false);
+          return;
+        }
+        
+        allUsers = data || [];
+        console.log("Data fetched from: Supabase (Initial Load)");
+
+        try {
+          await setItem(DB_NAME, STORE_NAME, "allUsers", allUsers);
+          const now = Date.now();
+          await setItem(DB_NAME, STORE_NAME, "lastSyncTime", now);
+          setLastSync(new Date(now));
+        } catch (indexedDBError) {
+       
         }
   
         setUsers(allUsers);
         setLoading(false);
   
       } catch (err) {
-        console.error("🚀 Unexpected error:", err);
         setLoading(false);
+      }
+    };
+    const checkForSupabaseUpdates = async () => {
+      try {
+        const { data, error } = await supabase.from("users").select("count").single();
+        
+        if (error) {
+          return;
+        }
+        
+        const currentCount = users.length;
+        const latestCount = data?.count || 0;
+        
+        if (latestCount > currentCount) {
+          refreshUsers();
+        }
+      } catch (err) {
       }
     };
   
     fetchAllUsers();
-  
-    // ✅ Supabase Realtime subscription
     const channel = supabase
       .channel("public:users")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "users" },
+        { 
+          event: "*", 
+          schema: "public", 
+          table: "users" 
+        },
         async (payload) => {
-          console.log("🚀 New user inserted:", payload.new);
-  
-          const storedUsers = await getItem(DB_NAME, STORE_NAME, "allUsers");
-          const existingUsers: any[] = Array.isArray(storedUsers) ? storedUsers : [];
-          const updatedUsers = [...existingUsers, payload.new];
-  
-          await setItem(DB_NAME, STORE_NAME, "allUsers", updatedUsers);
-          setUsers(updatedUsers);
+          try {
+            const DB_NAME = "egg-store-db";
+            const STORE_NAME = "users";
+            
+            const storedUsers = await getItem(DB_NAME, STORE_NAME, "allUsers");
+            let existingUsers: any[] = Array.isArray(storedUsers) ? storedUsers : [];
+            
+            if (payload.eventType === "INSERT") {
+              existingUsers = [payload.new, ...existingUsers];
+            } else if (payload.eventType === "UPDATE") {
+              existingUsers = existingUsers.map(user => 
+                user.id === payload.new.id ? { ...user, ...payload.new } : user
+              );
+            } else if (payload.eventType === "DELETE") {
+              existingUsers = existingUsers.filter(user => user.id !== payload.old.id);
+            }
+            
+            await setItem(DB_NAME, STORE_NAME, "allUsers", existingUsers);
+            await setItem(DB_NAME, STORE_NAME, "lastSyncTime", Date.now());
+            
+            // Update UI
+            setUsers(existingUsers);
+            setLastSync(new Date());
+          } catch (error) {
+          }
         }
       )
       .subscribe();
@@ -87,8 +136,45 @@ const UsersPage = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
-  
+  }, [users.length]);
+
+  const refreshUsers = async () => {
+    setLoading(true);
+    
+    try {
+      const { data, error } = await supabase.from("users").select("*").order('created_at', { ascending: false });
+      
+      if (error) {
+        try {
+          const storedUsers = await getItem("egg-store-db", "users", "allUsers");
+          const allUsers = Array.isArray(storedUsers) ? storedUsers : [];
+          setUsers(allUsers);
+        } catch (indexedDBError) {
+      
+        }
+        
+        setLoading(false);
+        return;
+      }
+      
+      const allUsers = data || [];
+      
+      try {
+        await setItem("egg-store-db", "users", "allUsers", allUsers);
+        const now = Date.now();
+        await setItem("egg-store-db", "users", "lastSyncTime", now);
+        setLastSync(new Date(now));
+      } catch (indexedDBError) {
+     
+      }
+      
+      setUsers(allUsers);
+      setLoading(false);
+      
+    } catch (err) {
+      setLoading(false);
+    }
+  };
 
   const filteredUsers = users.filter((user) => {
     const name = user.name || "";
@@ -114,20 +200,38 @@ const UsersPage = () => {
     });
   };
 
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString("en-US", {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h1 className="text-2xl font-semibold text-gray-800 flex items-center">
-          <User className="text-[#e6d281] mr-2" size={24} />
-          Customer Management
-        </h1>
-        <p className="text-gray-500 mt-1">
-          Manage all your customers in one place
-        </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-800 flex items-center">
+              <User className="text-[#e6d281] mr-2" size={24} />
+              Customer Management
+            </h1>
+            <p className="text-gray-500 mt-1">
+              Manage all your customers in one place
+            </p>
+        
+          </div>
+          <button
+            onClick={refreshUsers}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-[#e6d281] text-white rounded-lg hover:bg-[#d4c070] disabled:opacity-50 transition-colors"
+          >
+            <RefreshCw className={loading ? "animate-spin" : ""} size={16} />
+            Refresh
+          </button>
+        </div>
       </div>
-
-      {/* Filters */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Search */}
@@ -143,8 +247,6 @@ const UsersPage = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-
-          {/* Status Filter */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Filter className="text-gray-400" size={16} />
@@ -163,12 +265,20 @@ const UsersPage = () => {
         </div>
       </div>
 
-      {/* User Table */}
       <div className="bg-white rounded-lg shadow-md p-6 overflow-x-auto">
         {loading ? (
-          <div className="text-center text-gray-500">Loading users...</div>
+          <div className="text-center text-gray-500 py-8">
+            <RefreshCw className="animate-spin mx-auto mb-2" size={24} />
+            <p>Loading users...</p>
+          </div>
         ) : filteredUsers.length === 0 ? (
-          <div className="text-center text-gray-500">No users found.</div>
+          <div className="text-center text-gray-500 py-8">
+            <User className="mx-auto mb-2 text-gray-300" size={32} />
+            <p>No users found.</p>
+            {searchQuery && (
+              <p className="text-sm mt-2">Try adjusting your search query</p>
+            )}
+          </div>
         ) : (
           <table className="min-w-full text-left text-sm text-gray-600">
             <thead>
@@ -185,7 +295,7 @@ const UsersPage = () => {
                   key={user.id}
                   className="hover:bg-gray-50 transition-colors border-b border-gray-100"
                 >
-                  <td className="px-4 py-3">{user.name || "—"}</td>
+                  <td className="px-4 py-3 font-medium">{user.name || "—"}</td>
                   <td className="px-4 py-3">{user.email || "—"}</td>
                   <td className="px-4 py-3">
                     {user.isAdmin === true || user.isAdmin === "true" ? (
@@ -207,6 +317,7 @@ const UsersPage = () => {
                 </tr>
               ))}
             </tbody>
+
           </table>
         )}
       </div>

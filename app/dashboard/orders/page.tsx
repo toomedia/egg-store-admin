@@ -44,94 +44,100 @@ const OrdersPage = () => {
     { id: 'cancelled', name: 'Cancelled' },
   ];
 
-  useEffect(() => {
-    const fetchAllOrders = async () => {
+useEffect(() => {
+  const fetchAllOrders = async () => {
+    try {
+      let allOrders: any[] = [];
+      let shouldFetchFromSupabase = true;
+      
+      // First try to get orders from IndexedDB
       try {
-        let allOrders: any[] = [];
+        const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
+        if (Array.isArray(storedOrders) && storedOrders.length > 0) {
+          allOrders = storedOrders;
+          shouldFetchFromSupabase = false;
+          console.log("🚀 Loaded orders from IndexedDB:", allOrders.length);
+        }
+      } catch (indexedDBError) {
+        console.warn("IndexedDB not available or empty, fetching from Supabase:", indexedDBError);
+      }
+
+      if (shouldFetchFromSupabase) {
+        const { data, error } = await supabase.from("orders").select("*");
+        if (error) {
+          console.error("🚀 Error fetching orders:", error);
+          setError("Failed to load orders. Please refresh the page.");
+          setLoading(false);
+          return;
+        }
+        allOrders = data || [];
         
+        // Store in IndexedDB for future use
+        try {
+          await setItem(DB_NAME, STORE_NAME, "allOrders", allOrders);
+          console.log("Saved orders to IndexedDB:", allOrders.length);
+        } catch (indexedDBError) {
+          console.warn("Could not save to IndexedDB:", indexedDBError);
+        }
+        
+        console.log("Fetched orders from Supabase:", allOrders.length);
+      }
+
+      setOrders(allOrders);
+      setLoading(false);
+    } catch (err) {
+      console.error(" Unexpected error:", err);
+      setError("An unexpected error occurred. Please try again.");
+      setLoading(false);
+    }
+  };
+
+  fetchAllOrders();
+
+  // Realtime subscription code remains the same...
+  const channel = supabase
+    .channel("public:orders")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" },
+      async (payload) => {
+        console.log("🚀 New order inserted:", payload.new);
         try {
           const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-          allOrders = Array.isArray(storedOrders) ? storedOrders : [];
-        } catch (indexedDBError) {
-          console.warn("IndexedDB not available, fetching from Supabase directly:", indexedDBError);
+          const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
+          const updatedOrders = [...existingOrders, payload.new];
+          await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
+          setOrders(updatedOrders);
+        } catch (err) {
+          console.error("Error handling insert:", err);
         }
-
-        if (allOrders.length > 0) {
-          console.log("🚀 Loaded orders from IndexedDB:", allOrders);
-        } else {
-          const { data, error } = await supabase.from("orders").select("*");
-          if (error) {
-            console.error("🚀 Error fetching orders:", error);
-            setError("Failed to load orders. Please refresh the page.");
-            setLoading(false);
-            return;
-          }
-          allOrders = data || [];
-          
-          try {
-            await setItem(DB_NAME, STORE_NAME, "allOrders", allOrders);
-          } catch (indexedDBError) {
-            console.warn("Could not save to IndexedDB:", indexedDBError);
-          }
-          
-          console.log("🚀 Fetched orders from Supabase:", allOrders);
-        }
-
-        setOrders(allOrders);
-        setLoading(false);
-      } catch (err) {
-        console.error("🚀 Unexpected error:", err);
-        setError("An unexpected error occurred. Please try again.");
-        setLoading(false);
       }
-    };
-
-    fetchAllOrders();
-
-    const channel = supabase
-      .channel("public:orders")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" },
-        async (payload) => {
-          console.log("🚀 New order inserted:", payload.new);
-          try {
-            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-            const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
-            const updatedOrders = [...existingOrders, payload.new];
-            await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
-            setOrders(updatedOrders);
-          } catch (err) {
-            console.error("Error handling insert:", err);
+    )
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" },
+      async (payload) => {
+        console.log("Order updated:", payload.new);
+        try {
+          const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
+          const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
+          const updatedOrders = existingOrders.map(order => 
+            order.id === payload.new.id ? { ...order, ...payload.new } : order
+          );
+          await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
+          setOrders(updatedOrders);
+          
+          // Update selected order if it's the one being updated
+          if (selectedOrder && selectedOrder.id === payload.new.id) {
+            setSelectedOrder({ ...selectedOrder, ...payload.new });
           }
+        } catch (err) {
+          console.error("Error handling update:", err);
         }
-      )
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" },
-        async (payload) => {
-          console.log("🚀 Order updated:", payload.new);
-          try {
-            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-            const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
-            const updatedOrders = existingOrders.map(order => 
-              order.id === payload.new.id ? { ...order, payment_status: payload.new.payment_status } : order
-            );
-            await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
-            setOrders(updatedOrders);
-            
-            // Update selected order if it's the one being updated
-            if (selectedOrder && selectedOrder.id === payload.new.id) {
-              setSelectedOrder({ ...selectedOrder, payment_status: payload.new.payment_status });
-            }
-          } catch (err) {
-            console.error("Error handling update:", err);
-          }
-        }
-      )
-      .subscribe();
+      }
+    )
+    .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [selectedOrder]);
-
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [selectedOrder]);
   const updateOrderPaymentStatus = async (orderId: string, newStatus: string) => {
     setUpdatingStatus(orderId);
     setError(null);
@@ -153,7 +159,6 @@ const OrdersPage = () => {
         }
       } else {
         console.log("Order payment status updated successfully:", data);
-        // The realtime subscription will handle the UI update
       }
     } catch (err) {
       console.error("Unexpected error updating payment status:", err);
@@ -549,9 +554,9 @@ const OrdersPage = () => {
                           e.currentTarget.src = "/placeholder.png";
                         }}
                       />
-                      {designs.length > 2 && idx === 1 && (
+                      {designs.length > 1 && idx === 1 && (
                         <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center text-white text-sm font-medium">
-                          +{designs.length - 2} more
+                          +{designs.length - 1} more
                         </div>
                       )}
                     </div>
