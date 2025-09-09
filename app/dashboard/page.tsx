@@ -362,11 +362,9 @@ const StatusRow = ({ color, label, count }: any) => (
   </div>
 );
 
-// Safe image component that handles external URLs
 const SafeImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
   const isExternal = src.startsWith('http');
   
-  // For external images, we'll use a regular img tag until Next.js is configured
   if (isExternal) {
     return (
   <img 
