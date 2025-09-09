@@ -229,7 +229,11 @@ const OrdersPage = () => {
   };
 
   const getImage = (design: any) => {
-    if (design?.preset_images?.[0]) return design.preset_images[0];
+    if (design?.preset_images?.length > 0) {
+      // Select a random image from the preset_images array
+      const randomIndex = Math.floor(Math.random() * design.preset_images.length);
+      return design.preset_images[randomIndex];
+    }
     if (design?.image) return design.image;
     return "/placeholder.png";
   };
@@ -242,10 +246,49 @@ const OrdersPage = () => {
     return design?.preset_category?.en_category || design?.category || 'Uncategorized';
   };
 
+  // Function to get unique random images for each design
+  const getRandomImagesForDesigns = (designs: any[], count: number) => {
+    const selectedImages = [];
+    const availableImages = [];
+    
+    // Collect all available images from all designs
+    for (const design of designs) {
+      if (design?.preset_images?.length > 0) {
+        availableImages.push(...design.preset_images);
+      } else if (design?.image) {
+        availableImages.push(design.image);
+      }
+    }
+    
+    // If no images available, return placeholder
+    if (availableImages.length === 0) {
+      return Array(count).fill("/placeholder.png");
+    }
+    
+    // Select random unique images
+    const usedIndices = new Set();
+    while (selectedImages.length < count && selectedImages.length < availableImages.length) {
+      const randomIndex = Math.floor(Math.random() * availableImages.length);
+      if (!usedIndices.has(randomIndex)) {
+        selectedImages.push(availableImages[randomIndex]);
+        usedIndices.add(randomIndex);
+      }
+    }
+    
+    // If we need more images than available, fill with placeholders
+    while (selectedImages.length < count) {
+      selectedImages.push("/placeholder.png");
+    }
+    
+    return selectedImages;
+  };
+
   // ----------- ORDER DETAIL VIEW ------------
   if (selectedOrder) {
     const { user_info, preset_object } = selectedOrder;
     const designs = Array.isArray(preset_object) ? preset_object : [preset_object];
+    // Get random images for the detail view
+    const detailImages = getRandomImagesForDesigns(designs, Math.min(designs.length, 6));
 
     return (
       <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -356,8 +399,6 @@ const OrdersPage = () => {
                   </p>
                 </div>
               )}
-
-              {/* All Product Images in a Single Row */}
               <div className="flex space-x-4 mb-6 overflow-x-auto pb-2">
                 {designs.map((design, idx) => (
                   <div key={idx} className="flex-shrink-0 relative group">
@@ -373,6 +414,7 @@ const OrdersPage = () => {
                   </div>
                 ))}
               </div>
+
 
               {/* Quantity Summary */}
               <div className="text-sm text-gray-800">
@@ -479,7 +521,10 @@ const OrdersPage = () => {
             const designs = Array.isArray(order.preset_object) 
               ? order.preset_object 
               : [order.preset_object];
-            const firstTwoDesigns = designs.slice(0, 2);
+            
+            // Get two random images from all available images in the order
+            const randomImages = getRandomImagesForDesigns(designs, 2);
+            
             const customerName = order.user_info?.fullName 
               ? `${order.user_info.fullName}` 
               : 'Unknown Customer';
@@ -494,11 +539,11 @@ const OrdersPage = () => {
                   className="flex p-4 gap-2 bg-gray-50 border-b border-gray-200 cursor-pointer"
                   onClick={() => setSelectedOrder(order)}
                 >
-                  {firstTwoDesigns.map((design:any, idx:any) => (
+                  {randomImages.map((image, idx) => (
                     <div key={idx} className="relative w-1/2 aspect-square rounded-lg overflow-hidden bg-white">
                       <img
-                        src={getImage(design)}
-                        alt={getName(design)}
+                        src={image}
+                        alt={`Design ${idx + 1}`}
                         className="w-full h-full object-contain p-2"
                         onError={(e) => {
                           e.currentTarget.src = "/placeholder.png";
@@ -588,3 +633,9 @@ const OrdersPage = () => {
 };
 
 export default OrdersPage;
+
+
+
+
+
+
