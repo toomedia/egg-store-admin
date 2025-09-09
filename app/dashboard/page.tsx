@@ -258,9 +258,9 @@ const Dashboard = () => {
           value={users.length}
           icon={<UserIcon className="w-5 h-5" />}
         />
-        <StatCard
+    <StatCard
           title="Total Revenue"
-          value={`$${orders.reduce((total, order) => total + (order.payment || 44), 0)}`}
+          value={`$${orders.reduce((total, order) => total + (order.total_amount || 44), 0)}`}
           icon={<ChartBarIcon className="w-5 h-5" />}
         />
       </div>
