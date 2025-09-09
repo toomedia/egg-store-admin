@@ -369,19 +369,18 @@ const SafeImage = ({ src, alt, className }: { src: string, alt: string, classNam
   // For external images, we'll use a regular img tag until Next.js is configured
   if (isExternal) {
     return (
-      <img 
-        src={src} 
-        alt={alt} 
-        className={className}
-        onError={(e) => {
-          // Fallback if image fails to load
-          e.currentTarget.src = '/placeholder-image.jpg';
-        }}
-      />
+  <img 
+  src={src} 
+  alt={alt} 
+  className={`${className} w-15 h-15 object-cover`} 
+  onError={(e) => {
+    e.currentTarget.src = '/placeholder-image.jpg';
+  }}
+/>
+
     );
   }
   
-  // For local images, use Next.js Image component
   return (
     <Image
       src={src}
