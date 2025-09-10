@@ -16,8 +16,6 @@ import {
   Check,
   Loader2
 } from "lucide-react"
-
-// Define TypeScript interfaces
 interface PresetName {
   en_name: string;
   de_name: string;
@@ -64,12 +62,66 @@ interface FormData {
   images: PresetImage[];
 }
 
+// IndexedDB constants
+const DB_NAME = 'PresetsDB';
+const STORE_NAME = 'presets';
+const ALL_PRESETS_KEY = 'allPresets';
+
+// IndexedDB utility functions
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+  });
+};
+
+const setItem = async (key: string, value: any): Promise<void> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    store.put(value, key);
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+const getItem = async (key: string): Promise<any> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(STORE_NAME, 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.get(key);
+    
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
 const Page = () => {
   const [currentView, setCurrentView] = useState<'list' | 'create'>('list');
   const [preset, setPreset] = useState<Preset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<string>(''); // Track data source
   const categories = ['Nature', 'Abstract', 'Easter', 'Animals', 'Holiday'];
 
   // Form state
@@ -96,33 +148,34 @@ const Page = () => {
   useEffect(() => {
     const fetchAllPresets = async () => {
       try {
-        // 1️⃣ Check if data exists in localStorage
-        const localData = localStorage.getItem('allPresets');
         let allPresets: any[] = [];
-  
-        if (localData) {
-          allPresets = JSON.parse(localData);
-          console.log("🚀 Loaded presets from localStorage:", allPresets);
-        } else {
-          const { data, error } = await supabase.from('presets').select('*');
-          if (error) {
-            console.error("🚀 Error fetching presets:", error);
-            return;
+        
+        try {
+          const indexedDBData = await getItem(ALL_PRESETS_KEY);
+          if (indexedDBData && Array.isArray(indexedDBData) && indexedDBData.length > 0) {
+            allPresets = indexedDBData;
+            console.log(" Loaded presets from IndexedDB:", allPresets);
+            setDataSource('IndexedDB');
+            setPreset(allPresets);
+            return; 
           }
-          allPresets = data || [];
-          localStorage.setItem('allPresets', JSON.stringify(allPresets));
-          console.log("🚀 Fetched presets from Supabase:", allPresets);
+        } catch (indexedDBError) {
+        }
+        setDataSource('Supabase');
+        const { data, error } = await supabase.from('presets').select('*');
+        if (error) {
+          return;
+        }
+        allPresets = data || [];
+        
+        // Save to IndexedDB
+        try {
+          await setItem(ALL_PRESETS_KEY, allPresets);
+        } catch (indexedDBError) {
         }
 
         setPreset(allPresets);
-        const imageLoadingStates: { [key: string]: boolean } = {};
-        allPresets.forEach(preset => {
-          preset.preset_images?.forEach((img: string) => {
-            imageLoadingStates[img] = true;
-          });
-        });
       } catch (err) {
-        console.error("🚀 Unexpected error:", err);
       }
     };
   
@@ -133,40 +186,56 @@ const Page = () => {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'presets' },
-        payload => {
-          console.log('🚀 New preset inserted:', payload.new);
+        async (payload) => {
+          setDataSource('Supabase Realtime');
   
           const updatedPresets = [
-            ...(JSON.parse(localStorage.getItem('allPresets') || '[]')),
+            ...preset,
             payload.new
           ];
-          localStorage.setItem('allPresets', JSON.stringify(updatedPresets));
-          setPreset(updatedPresets);
+          
+          // Update IndexedDB
+          try {
+            await setItem(ALL_PRESETS_KEY, updatedPresets);
+          } catch (indexedDBError) {
+          }
+          
+          setPreset(updatedPresets as Preset[]);
         }
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'presets' },
-        payload => {
-          console.log('🚀 Preset updated:', payload.new);
+        async (payload) => {
+          setDataSource('Supabase Realtime');
   
-          const storedPresets = JSON.parse(localStorage.getItem('allPresets') || '[]');
-          const updatedPresets = storedPresets.map((item: any) => 
+          const updatedPresets = preset.map((item: any) => 
             item.id === payload.new.id ? payload.new : item
           );
-          localStorage.setItem('allPresets', JSON.stringify(updatedPresets));
+          
+          // Update IndexedDB
+          try {
+            await setItem(ALL_PRESETS_KEY, updatedPresets);
+          } catch (indexedDBError) {
+          }
+          
           setPreset(updatedPresets);
         }
       )
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'presets' },
-        payload => {
-          console.log('🚀 Preset deleted:', payload.old);
+        async (payload) => {
+          setDataSource('Supabase Realtime');
   
-          const storedPresets = JSON.parse(localStorage.getItem('allPresets') || '[]');
-          const updatedPresets = storedPresets.filter((item: any) => item.id !== payload.old.id);
-          localStorage.setItem('allPresets', JSON.stringify(updatedPresets));
+          const updatedPresets = preset.filter((item: any) => item.id !== payload.old.id);
+          
+          // Update IndexedDB
+          try {
+            await setItem(ALL_PRESETS_KEY, updatedPresets);
+          } catch (indexedDBError) {
+          }
+          
           setPreset(updatedPresets);
         }
       )
@@ -178,41 +247,24 @@ const Page = () => {
   
   }, [currentView]);
 
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, type, value } = e.target;
-  
-    if (type === "file") {
-      const files = (e.target as HTMLInputElement).files;
-      if (!files) return;
-      
-      const imageObjects = Array.from(files).map(file => ({
-        fileObject: file,
-        previewUrl: URL.createObjectURL(file)
-      }));
-      
-      setFormData((prev) => ({
-        ...prev,
-        [name]: imageObjects, 
-      }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
-    }
-  };
-  
-  const handleFilterToggle = (filter: string) => {
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      filters: prev.filters.includes(filter)
-        ? prev.filters.filter(f => f !== filter)
-        : [...prev.filters, filter]
+      [name]: value
     }));
   };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+  const handleFilterToggle = (filter: string) => {
+    setFormData(prev => {
+      const filters = prev.filters.includes(filter)
+        ? prev.filters.filter(f => f !== filter)
+        : [...prev.filters, filter];
+      return { ...prev, filters };
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     setIsLoading(true);
     e.preventDefault();
     
@@ -247,7 +299,6 @@ const Page = () => {
             .upload(filePath, file);
 
           if (uploadError) {
-            console.error("Image upload error:", uploadError);
             formData.images.forEach(img => {
               if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
             });
@@ -345,27 +396,15 @@ const Page = () => {
       }
   
       if (error) {
-        console.error("Preset save error:", error);
-        console.error("Error details:", {
-          editingId,
-          formData: {
-            titleEn: formData.titleEn,
-            titleDe: formData.titleDe,
-            category: formData.category,
-            size: formData.size,
-            price: formData.price,
-            imageCount: formData.images.length
-          }
-        });
+       
+       
         alert(`Failed to ${editingId ? 'update' : 'create'} preset: ${error.message}`);
         setIsLoading(false);
         return;
       }
   
-      console.log(editingId ? "Preset updated:" : "Preset created:", data);
       alert(editingId ? "Preset updated successfully!" : "Preset created successfully!");
       
-      // Update local state
       let updatedPresets;
       if (editingId) {
         updatedPresets = preset.map(item => 
@@ -377,14 +416,15 @@ const Page = () => {
         setPreset(updatedPresets);
       }
       
-      // Update localStorage
-      localStorage.setItem('allPresets', JSON.stringify(updatedPresets));
+      try {
+        await setItem(ALL_PRESETS_KEY, updatedPresets);
+      } catch (indexedDBError) {
+      }
       
       setCurrentView("list");
       setEditingId(null);
   
     } catch (err) {
-      console.error("Unexpected error:", err);
       formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
     } finally {
       setIsLoading(false);
@@ -399,7 +439,6 @@ const Page = () => {
     setDeletingId(id);
     
     try {
-      // First delete associated images from storage if they exist
       const presetToDelete = preset.find(item => item.id === id);
       if (presetToDelete && (presetToDelete.preset_images ?? []).length > 0) {
         const imagePaths = (presetToDelete.preset_images ?? []).map(url => {
@@ -412,34 +451,28 @@ const Page = () => {
           .remove(imagePaths);
 
         if (storageError) {
-          console.error("Image deletion error:", storageError);
-          // Continue with preset deletion even if image deletion fails
         }
       }
-
-      // Delete the preset record from the database
       const { error } = await supabase
         .from('presets')
         .delete()
         .eq('id', id);
 
       if (error) {
-        console.error("Delete error:", error);
         alert("Failed to delete preset. Please try again.");
         return;
       }
-
-      // Update local state by filtering out the deleted preset
       const updatedPresets = preset.filter(item => item.id !== id);
       setPreset(updatedPresets);
-      
-      // Update localStorage
-      localStorage.setItem('allPresets', JSON.stringify(updatedPresets));
+      try {
+        await setItem(ALL_PRESETS_KEY, updatedPresets);
+      } catch (indexedDBError) {
+        
+      }
       
       alert("Preset deleted successfully!");
 
     } catch (err) {
-      console.error("Unexpected error during deletion:", err);
       alert("An unexpected error occurred. Please try again.");
     } finally {
       setDeletingId(null);
@@ -449,12 +482,11 @@ const Page = () => {
   const handleEdit = (id: string) => {
     const presetToEdit = preset.find(item => item.id === id);
     if (presetToEdit) {
-      // Convert existing image URLs to PresetImage format
       const existingImages = (presetToEdit.preset_images || []).map((imageUrl: string, index: number) => ({
-        fileObject: null, // No file object for existing images
+        fileObject: null, 
         previewUrl: imageUrl,
-        isExisting: true, // Flag to identify existing images
-        originalUrl: imageUrl // Keep original URL for reference
+        isExisting: true, 
+        originalUrl: imageUrl
       }));
       
       setFormData({
@@ -589,8 +621,7 @@ const Page = () => {
               </div>
             </div>
           </div>
-      
-          {/* Category & Filters Section */}
+    
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
               <Layers className="text-[#e6d281] mr-2" size={20} />
@@ -670,8 +701,6 @@ const Page = () => {
               </div>
             </div>
           </div>
-
-          {/* Size & Price Section */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
               <DollarSign className="text-[#e6d281] mr-2" size={20} />
