@@ -288,12 +288,42 @@ useEffect(() => {
     return selectedImages;
   };
 
+  // Function to generate egg images for the grid
+  const generateEggGrid = (designs: any[]) => {
+    const totalEggs = 36; // 6x6 grid
+    const eggImages = [];
+    
+    // Collect all available egg images from all designs
+    const allEggImages = [];
+    for (const design of designs) {
+      if (design?.preset_images?.length > 0) {
+        allEggImages.push(...design.preset_images);
+      } else if (design?.image) {
+        allEggImages.push(design.image);
+      }
+    }
+    
+    // Fill the grid with eggs
+    for (let i = 0; i < totalEggs; i++) {
+      if (allEggImages.length > 0) {
+        // Use a random image from available eggs
+        const randomIndex = Math.floor(Math.random() * allEggImages.length);
+        eggImages.push(allEggImages[randomIndex]);
+      } else {
+        // Use placeholder if no images available
+        eggImages.push("/placeholder.png");
+      }
+    }
+    
+    return eggImages;
+  };
+
   // ----------- ORDER DETAIL VIEW ------------
   if (selectedOrder) {
     const { user_info, preset_object } = selectedOrder;
     const designs = Array.isArray(preset_object) ? preset_object : [preset_object];
-    // Get random images for the detail view
-    const detailImages = getRandomImagesForDesigns(designs, Math.min(designs.length, 6));
+    // Generate egg grid for the detail view
+    const eggGridImages = generateEggGrid(designs);
 
     return (
       <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -404,22 +434,23 @@ useEffect(() => {
                   </p>
                 </div>
               )}
-              <div className="flex space-x-4 mb-6 overflow-x-auto pb-2">
-                {designs.map((design, idx) => (
-                  <div key={idx} className="flex-shrink-0 relative group">
-                    <div className="w-32 h-32 bg-gray-50 rounded border flex items-center justify-center">
+              
+              {/* Egg Grid - 6x6 layout */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Egg Designs Preview</h4>
+                <div className="grid grid-cols-6 gap-2">
+                  {eggGridImages.map((image, index) => (
+                    <div key={index} className="aspect-square bg-gray-50 rounded border flex items-center justify-center overflow-hidden">
                       <img
-                        src={getImage(design)}
-                        alt={getName(design)}
-                        className="max-w-full max-h-full object-contain p-2"
+                        src={image}
+                        alt={`Egg design ${index + 1}`}
+                        className="w-full h-full object-contain p-1"
                         onError={(e) => e.currentTarget.src = "/placeholder.png"}
                       />
                     </div>
-                    <div className="absolute inset-0 bg-opacity-0 group-hover:bg-opacity-10 transition-all rounded"></div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-
 
               {/* Quantity Summary */}
               <div className="text-sm text-gray-800">
@@ -527,8 +558,8 @@ useEffect(() => {
               ? order.preset_object 
               : [order.preset_object];
             
-            // Get two random images from all available images in the order
-            const randomImages = getRandomImagesForDesigns(designs, 2);
+            // Get six random images from all available images in the order
+            const randomImages = getRandomImagesForDesigns(designs, 6);
             
             const customerName = order.user_info?.fullName 
               ? `${order.user_info.fullName}` 
@@ -539,28 +570,30 @@ useEffect(() => {
                 key={order.id}
                 className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-all group"
               >
-                {/* Images Section */}
+                {/* Images Section - 6 image grid */}
                 <div 
-                  className="flex p-4 gap-2 bg-gray-50 border-b border-gray-200 cursor-pointer"
+                  className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer"
                   onClick={() => setSelectedOrder(order)}
                 >
-                  {randomImages.map((image, idx) => (
-                    <div key={idx} className="relative w-1/2 aspect-square rounded-lg overflow-hidden bg-white">
-                      <img
-                        src={image}
-                        alt={`Design ${idx + 1}`}
-                        className="w-full h-full object-contain p-2"
-                        onError={(e) => {
-                          e.currentTarget.src = "/placeholder.png";
-                        }}
-                      />
-                      {designs.length > 1 && idx === 1 && (
-                        <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center text-white text-sm font-medium">
-                          +{designs.length - 1} more
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  <div className="grid grid-cols-3 gap-2">
+                    {randomImages.map((image, idx) => (
+                      <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-white">
+                        <img
+                          src={image}
+                          alt={`Design ${idx + 1}`}
+                          className="w-full h-full object-contain p-1"
+                          onError={(e) => {
+                            e.currentTarget.src = "/placeholder.png";
+                          }}
+                        />
+                        {idx === 5 && designs.length > 6 && (
+                          <div className="absolute inset-0  bg-opacity-40 flex items-center justify-center text-white text-xs font-medium">
+                           
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Order Info Section */}
@@ -638,9 +671,3 @@ useEffect(() => {
 };
 
 export default OrdersPage;
-
-
-
-
-
-
