@@ -145,107 +145,73 @@ const Page = () => {
   
   const filters = ['Floral', 'Geometric', 'Minimalist', 'Colorful', 'Vintage'];
 
-  useEffect(() => {
-    const fetchAllPresets = async () => {
+useEffect(() => {
+  const fetchAllPresets = async () => {
+    try {
+      let allPresets: any[] = [];
+      setDataSource('Supabase');
+      
+      const { data, error } = await supabase.from('presets').select('*');
+      if (error) {
+        console.error("Error fetching presets:", error);
+        return;
+      }
+      
+      allPresets = data || [];
+      
+      // Save to IndexedDB
       try {
-        let allPresets: any[] = [];
-        
-        try {
-          const indexedDBData = await getItem(ALL_PRESETS_KEY);
-          if (indexedDBData && Array.isArray(indexedDBData) && indexedDBData.length > 0) {
-            allPresets = indexedDBData;
-            console.log(" Loaded presets from IndexedDB:", allPresets);
-            setDataSource('IndexedDB');
-            setPreset(allPresets);
-            return; 
-          }
-        } catch (indexedDBError) {
-        }
-        setDataSource('Supabase');
+        await setItem(ALL_PRESETS_KEY, allPresets);
+      } catch (indexedDBError) {
+        console.error("Error saving to IndexedDB:", indexedDBError);
+      }
+
+      setPreset(allPresets);
+    } catch (err) {
+      console.error("Unexpected error:", err);
+    }
+  };
+
+  fetchAllPresets();
+
+  const channel = supabase
+    .channel('public:presets')  
+    .on(
+      'postgres_changes',
+      { 
+        event: '*',  
+        schema: 'public', 
+        table: 'presets' 
+      },
+      async (payload) => {
+        setDataSource('Supabase Realtime');
+
         const { data, error } = await supabase.from('presets').select('*');
+        
         if (error) {
+          console.error("Error refetching presets:", error);
           return;
         }
-        allPresets = data || [];
         
-        // Save to IndexedDB
+        const updatedPresets = data || [];
+        
+        // Update IndexedDB
         try {
-          await setItem(ALL_PRESETS_KEY, allPresets);
+          await setItem(ALL_PRESETS_KEY, updatedPresets);
         } catch (indexedDBError) {
+          console.error("Error updating IndexedDB:", indexedDBError);
         }
-
-        setPreset(allPresets);
-      } catch (err) {
+        
+        setPreset(updatedPresets as Preset[]);
       }
-    };
-  
-    fetchAllPresets();
-  
-    const channel = supabase
-      .channel('public:presets')  
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'presets' },
-        async (payload) => {
-          setDataSource('Supabase Realtime');
-  
-          const updatedPresets = [
-            ...preset,
-            payload.new
-          ];
-          
-          // Update IndexedDB
-          try {
-            await setItem(ALL_PRESETS_KEY, updatedPresets);
-          } catch (indexedDBError) {
-          }
-          
-          setPreset(updatedPresets as Preset[]);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'presets' },
-        async (payload) => {
-          setDataSource('Supabase Realtime');
-  
-          const updatedPresets = preset.map((item: any) => 
-            item.id === payload.new.id ? payload.new : item
-          );
-          
-          // Update IndexedDB
-          try {
-            await setItem(ALL_PRESETS_KEY, updatedPresets);
-          } catch (indexedDBError) {
-          }
-          
-          setPreset(updatedPresets);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'presets' },
-        async (payload) => {
-          setDataSource('Supabase Realtime');
-  
-          const updatedPresets = preset.filter((item: any) => item.id !== payload.old.id);
-          
-          // Update IndexedDB
-          try {
-            await setItem(ALL_PRESETS_KEY, updatedPresets);
-          } catch (indexedDBError) {
-          }
-          
-          setPreset(updatedPresets);
-        }
-      )
-      .subscribe();
-  
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  
-  }, [currentView]);
+    )
+    .subscribe();
+
+  // Cleanup on unmount
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [currentView]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
