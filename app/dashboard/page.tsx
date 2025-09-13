@@ -25,36 +25,97 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    
+    // Set up real-time subscriptions
+    const ordersChannel = supabase
+      .channel('dashboard-orders')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'orders' }, 
+        () => {
+          // Refresh orders data when any change happens
+          fetchOrders();
+        }
+      )
+      .subscribe();
+
+    const presetsChannel = supabase
+      .channel('dashboard-presets')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'presets' }, 
+        () => {
+          // Refresh presets data when any change happens
+          fetchPresets();
+        }
+      )
+      .subscribe();
+
+    const usersChannel = supabase
+      .channel('dashboard-users')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'users' }, 
+        () => {
+          // Refresh users data when any change happens
+          fetchUsers();
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscriptions on component unmount
+    return () => {
+      supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(presetsChannel);
+      supabase.removeChannel(usersChannel);
+    };
   }, []);
+
+  const fetchOrders = async () => {
+    try {
+      const { data, error } = await supabase.from("orders").select("*");
+      if (error) throw error;
+      setOrders(data || []);
+      return data || [];
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+      return [];
+    }
+  };
+
+  const fetchPresets = async () => {
+    try {
+      const { data, error } = await supabase.from("presets").select("*");
+      if (error) throw error;
+      setPresets(data || []);
+      return data || [];
+    } catch (error) {
+      console.error("Error fetching presets:", error);
+      return [];
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase.from("users").select("*");
+      if (error) throw error;
+      setUsers(data || []);
+      return data || [];
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      return [];
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const [
-        { data: ordersData, error: ordersError },
-        { data: presetsData, error: presetsError },
-        { data: usersData, error: usersError },
-      ] = await Promise.all([
-        supabase.from("orders").select("*"),
-        supabase.from("presets").select("*"),
-        supabase.from("users").select("*"),
+      const [ordersData, presetsData, usersData] = await Promise.all([
+        fetchOrders(),
+        fetchPresets(),
+        fetchUsers()
       ]);
 
-      if (ordersError || presetsError || usersError) {
-        console.error(
-          "Supabase fetch error:",
-          ordersError || presetsError || usersError
-        );
-        throw new Error("One or more tables failed to load.");
-      }
-
-      setOrders(ordersData || []);
-      setPresets(presetsData || []);
-      setUsers(usersData || []);
-
-      buildActivities(ordersData || [], presetsData || [], usersData || []);
+      buildActivities(ordersData, presetsData, usersData);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
       setError(`Failed to load dashboard: ${(error as Error).message}`);
@@ -258,7 +319,7 @@ const Dashboard = () => {
           value={users.length}
           icon={<UserIcon className="w-5 h-5" />}
         />
-    <StatCard
+        <StatCard
           title="Total Revenue"
           value={`$${orders.reduce((total, order) => total + (order.total_amount || 44), 0)}`}
           icon={<ChartBarIcon className="w-5 h-5" />}
@@ -367,15 +428,14 @@ const SafeImage = ({ src, alt, className }: { src: string, alt: string, classNam
   
   if (isExternal) {
     return (
-  <img 
-  src={src} 
-  alt={alt} 
-  className={`${className} w-15 h-15 object-cover`} 
-  onError={(e) => {
-    e.currentTarget.src = '/placeholder-image.jpg';
-  }}
-/>
-
+      <img 
+        src={src} 
+        alt={alt} 
+        className={`${className} w-15 h-15 object-cover`} 
+        onError={(e) => {
+          e.currentTarget.src = '/placeholder-image.jpg';
+        }}
+      />
     );
   }
   

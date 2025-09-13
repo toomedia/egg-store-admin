@@ -44,107 +44,130 @@ const OrdersPage = () => {
     { id: 'cancelled', name: 'Cancelled' },
   ];
 
-useEffect(() => {
-  const fetchAllOrders = async () => {
-    try {
-      let allOrders: any[] = [];
-      let shouldFetchFromSupabase = true;
-      
-      // First try to get orders from IndexedDB
+  useEffect(() => {
+    const fetchAllOrders = async () => {
       try {
-        const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-        if (Array.isArray(storedOrders) && storedOrders.length > 0) {
-          allOrders = storedOrders;
-          shouldFetchFromSupabase = false;
-          console.log("🚀 Loaded orders from IndexedDB:", allOrders.length);
-        }
-      } catch (indexedDBError) {
-        console.warn("IndexedDB not available or empty, fetching from Supabase:", indexedDBError);
-      }
-
-      if (shouldFetchFromSupabase) {
-        const { data, error } = await supabase.from("orders").select("*");
-        if (error) {
-          console.error("🚀 Error fetching orders:", error);
-          setError("Failed to load orders. Please refresh the page.");
-          setLoading(false);
-          return;
-        }
-        allOrders = data || [];
+        let allOrders: any[] = [];
+        let shouldFetchFromSupabase = true;
         
-        // Store in IndexedDB for future use
-        try {
-          await setItem(DB_NAME, STORE_NAME, "allOrders", allOrders);
-          console.log("Saved orders to IndexedDB:", allOrders.length);
-        } catch (indexedDBError) {
-          console.warn("Could not save to IndexedDB:", indexedDBError);
-        }
-        
-        console.log("Fetched orders from Supabase:", allOrders.length);
-      }
-
-      setOrders(allOrders);
-      setLoading(false);
-    } catch (err) {
-      console.error(" Unexpected error:", err);
-      setError("An unexpected error occurred. Please try again.");
-      setLoading(false);
-    }
-  };
-
-  fetchAllOrders();
-
-  // Realtime subscription code remains the same...
-  const channel = supabase
-    .channel("public:orders")
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" },
-      async (payload) => {
-        console.log("🚀 New order inserted:", payload.new);
+        // First try to get orders from IndexedDB
         try {
           const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-          const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
-          const updatedOrders = [...existingOrders, payload.new];
-          await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
-          setOrders(updatedOrders);
-        } catch (err) {
-          console.error("Error handling insert:", err);
-        }
-      }
-    )
-    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" },
-      async (payload) => {
-        console.log("Order updated:", payload.new);
-        try {
-          const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-          const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
-          const updatedOrders = existingOrders.map(order => 
-            order.id === payload.new.id ? { ...order, ...payload.new } : order
-          );
-          await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
-          setOrders(updatedOrders);
-          
-          // Update selected order if it's the one being updated
-          if (selectedOrder && selectedOrder.id === payload.new.id) {
-            setSelectedOrder({ ...selectedOrder, ...payload.new });
+          if (Array.isArray(storedOrders) && storedOrders.length > 0) {
+            allOrders = storedOrders;
+            shouldFetchFromSupabase = false;
+            console.log("🚀 Loaded orders from IndexedDB:", allOrders.length);
           }
-        } catch (err) {
-          console.error("Error handling update:", err);
+        } catch (indexedDBError) {
+          console.warn("IndexedDB not available or empty, fetching from Supabase:", indexedDBError);
         }
-      }
-    )
-    .subscribe();
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [selectedOrder]);
+        if (shouldFetchFromSupabase) {
+          const { data, error } = await supabase.from("orders").select("*").order('created_at', { ascending: false });
+          if (error) {
+            console.error("🚀 Error fetching orders:", error);
+            setError("Failed to load orders. Please refresh the page.");
+            setLoading(false);
+            return;
+          }
+          allOrders = data || [];
+          
+          // Store in IndexedDB for future use
+          try {
+            await setItem(DB_NAME, STORE_NAME, "allOrders", allOrders);
+            console.log("Saved orders to IndexedDB:", allOrders.length);
+          } catch (indexedDBError) {
+            console.warn("Could not save to IndexedDB:", indexedDBError);
+          }
+          
+          console.log("Fetched orders from Supabase:", allOrders.length);
+        }
+
+        setOrders(allOrders);
+        setLoading(false);
+      } catch (err) {
+        console.error(" Unexpected error:", err);
+        setError("An unexpected error occurred. Please try again.");
+        setLoading(false);
+      }
+    };
+
+    fetchAllOrders();
+
+    // Realtime subscription for orders
+    const channel = supabase
+      .channel("public:orders")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" },
+        async (payload) => {
+          console.log("🚀 New order inserted:", payload.new);
+          try {
+            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
+            const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
+            const updatedOrders = [payload.new, ...existingOrders]; // Add new order to the beginning
+            await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
+            setOrders(updatedOrders);
+          } catch (err) {
+            console.error("Error handling insert:", err);
+          }
+        }
+      )
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" },
+        async (payload) => {
+          console.log("Order updated:", payload.new);
+          try {
+            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
+            const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
+            const updatedOrders = existingOrders.map(order => 
+              order.id === payload.new.id ? { ...order, ...payload.new } : order
+            );
+            await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
+            setOrders(updatedOrders);
+            
+            // Update selected order if it's the one being updated
+            if (selectedOrder && selectedOrder.id === payload.new.id) {
+              setSelectedOrder({ ...selectedOrder, ...payload.new });
+            }
+          } catch (err) {
+            console.error("Error handling update:", err);
+          }
+        }
+      )
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "orders" },
+        async (payload) => {
+          console.log("Order deleted:", payload.old);
+          try {
+            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
+            const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
+            const updatedOrders = existingOrders.filter(order => order.id !== payload.old.id);
+            await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
+            setOrders(updatedOrders);
+            
+            // Clear selected order if it's the one being deleted
+            if (selectedOrder && selectedOrder.id === payload.old.id) {
+              setSelectedOrder(null);
+            }
+          } catch (err) {
+            console.error("Error handling delete:", err);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedOrder]);
+
   const updateOrderPaymentStatus = async (orderId: string, newStatus: string) => {
     setUpdatingStatus(orderId);
     setError(null);
     try {
       const { data, error } = await supabase
         .from("orders")
-        .update({ payment_status: newStatus, updated_at: new Date().toISOString() })
+        .update({ 
+          payment_status: newStatus, 
+          updated_at: new Date().toISOString() 
+        })
         .eq("id", orderId)
         .select();
         
@@ -159,6 +182,24 @@ useEffect(() => {
         }
       } else {
         console.log("Order payment status updated successfully:", data);
+        
+        // Update local state immediately for better UX
+        const updatedOrders = orders.map(order => 
+          order.id === orderId ? { ...order, payment_status: newStatus } : order
+        );
+        setOrders(updatedOrders);
+        
+        // Update IndexedDB
+        try {
+          await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
+        } catch (indexedDBError) {
+          console.warn("Could not update IndexedDB:", indexedDBError);
+        }
+        
+        // Update selected order if it's the one being updated
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder({ ...selectedOrder, payment_status: newStatus });
+        }
       }
     } catch (err) {
       console.error("Unexpected error updating payment status:", err);
@@ -172,7 +213,7 @@ useEffect(() => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await supabase.from("orders").select("*");
+      const { data, error } = await supabase.from("orders").select("*").order('created_at', { ascending: false });
       if (error) {
         console.error("Error refreshing orders:", error);
         setError("Failed to refresh orders. Please try again.");
@@ -561,8 +602,8 @@ useEffect(() => {
             // Get six random images from all available images in the order
             const randomImages = getRandomImagesForDesigns(designs, 6);
             
-            const customerName = order.user_info?.fullName 
-              ? `${order.user_info.fullName}` 
+            const customerName = order.user_info?.firstName 
+              ? `${order.user_info.firstName} ${order.user_info.lastName || ''}` 
               : 'Unknown Customer';
 
             return (
