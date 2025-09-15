@@ -12,7 +12,8 @@ import {
   XCircle,
   AlertCircle,
   CheckCircle,
-  Tag
+  Tag,
+  Loader2
 } from "lucide-react";
 
 interface Creation {
@@ -41,6 +42,7 @@ const OwnCreations = () => {
   const [notification, setNotification] = useState<{type: string, message: string} | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [allTags, setAllTags] = useState<string[]>([]);
+  const [imageLoadingStates, setImageLoadingStates] = useState<Record<string, boolean>>({});
   
   const itemsPerPage = 12;
 
@@ -314,6 +316,20 @@ const OwnCreations = () => {
     }
   };
 
+  const handleImageLoad = (creationId: string) => {
+    setImageLoadingStates(prev => ({
+      ...prev,
+      [creationId]: false
+    }));
+  };
+
+  const handleImageStartLoading = (creationId: string) => {
+    setImageLoadingStates(prev => ({
+      ...prev,
+      [creationId]: true
+    }));
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {notification && (
@@ -438,13 +454,21 @@ const OwnCreations = () => {
                 key={creation.id} 
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
               >
-                <div className="relative">
+                <div className="relative aspect-square">
+                  {imageLoadingStates[creation.id] !== false && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                      <Loader2 className="animate-spin text-gray-400" size={24} />
+                    </div>
+                  )}
                   <img 
                     src={creation.generated_images} 
                     alt={creation.title}
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full object-cover ${imageLoadingStates[creation.id] !== false ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
+                    onLoad={() => handleImageLoad(creation.id)}
+                    onLoadStart={() => handleImageStartLoading(creation.id)}
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI0VFRUVFRSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkeT0iLjM1ZW0iIHRleHQtYW5jaG9yPSJtaWRkbxlIiBmb250LXNpemU9IjIwIiBmb250LWZhbWlseT0ibW9ub3NwYWNlIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
+                      handleImageLoad(creation.id);
                     }}
                     loading="lazy"
                   />

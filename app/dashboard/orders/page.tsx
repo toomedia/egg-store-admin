@@ -432,7 +432,7 @@ const OrdersPage = () => {
                 {/* Customer Column */}
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-2">CUSTOMER</h3>
-                  <p className="text-gray-800">{user_info?.firstName} {user_info?.lastName}</p>
+                  <p className="text-gray-800">{user_info?.fullName}</p>
                   <p className="text-gray-600 mt-1">{user_info?.email}</p>
                   <p className="text-gray-600 mt-1">{user_info?.phone || 'No phone provided'}</p>
                 </div>

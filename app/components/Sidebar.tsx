@@ -29,7 +29,7 @@ export default function Sidebar() {
     { href: "/dashboard/customer", label: "Customer", icon: <Users className="h-5 w-5" /> },
     { href: "/dashboard/presets", label: "Presets", icon: <Box className="h-5 w-5" /> },
         { href: "/dashboard/ownCreations", label: "Own Creations", icon: <Sparkles className="h-5 w-5" /> },
-    { href: "/dashboard/mediaManage", label: "Media Manager", icon: <Image className="h-5 w-5" /> },
+    // { href: "/dashboard/mediaManage", label: "Media Manager", icon: <Image className="h-5 w-5" /> },
     { href: "/dashboard/adminManage", label: "Admin Manager", icon: <Shield className="h-5 w-5" /> },
     { href: "/dashboard/reports", label: "Reports", icon: <FileText className="h-5 w-5" /> },
     { href: "/dashboard/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> },
