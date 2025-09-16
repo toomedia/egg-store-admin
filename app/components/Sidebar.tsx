@@ -28,7 +28,7 @@ export default function Sidebar() {
     { href: "/dashboard/orders", label: "Orders", icon: <ShoppingCart className="h-5 w-5" /> },
     { href: "/dashboard/customer", label: "Customer", icon: <Users className="h-5 w-5" /> },
     { href: "/dashboard/presets", label: "Presets", icon: <Box className="h-5 w-5" /> },
-        { href: "/dashboard/ownCreations", label: "Own Creations", icon: <Sparkles className="h-5 w-5" /> },
+    { href: "/dashboard/ownCreations", label: "Own Creations", icon: <Sparkles className="h-5 w-5" /> },
     { href: "/dashboard/adminManage", label: "Admin Manager", icon: <Shield className="h-5 w-5" /> },
     { href: "/dashboard/reports", label: "Reports", icon: <FileText className="h-5 w-5" /> },
     { href: "/dashboard/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> },
@@ -74,11 +74,10 @@ export default function Sidebar() {
                 <Egg className="h-6 w-6 text-[#e6d281]" />
               </div>
               <div>
-        <div className="flex flex-col leading-tight">
-  <h1 className="text-2xl font-bold tracking-tight text-gray-900">Eggception</h1>
-  <span className="text-sm text-gray-500">Admin Dashboard</span>
-</div>
-
+                <div className="flex flex-col leading-tight">
+                  <h1 className="text-2xl font-bold tracking-tight text-gray-900">Eggception</h1>
+                  <span className="text-base text-gray-500">Admin Dashboard</span>
+                </div>
               </div>
             </Link>
           </div>
@@ -90,7 +89,7 @@ export default function Sidebar() {
                 key={item.href}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                className={`flex items-center gap-3 px-3 py-3 rounded-md text-base font-medium transition-colors ${
                   isActive(item.href)
                     ? "bg-[#e6d281]/20 text-[#e6d281] font-semibold"
                     : "text-gray-700 hover:bg-gray-50"
@@ -109,7 +108,7 @@ export default function Sidebar() {
         <div className="p-4 border-t border-gray-200">
           <button
             onClick={() => alert("Logout clicked")}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium text-red-600 hover:bg-red-50 transition-colors font-manrope"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md text-base font-medium text-red-600 hover:bg-red-50 transition-colors font-manrope"
           >
             <LogOut className="h-5 w-5" />
             <span>Logout</span>
