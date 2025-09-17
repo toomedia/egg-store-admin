@@ -3,27 +3,28 @@ import React, { useEffect, useState } from "react";
 import { getItem, setItem } from "@/utils/indexedDB";
 import { supabase } from "../../../utils/supabaseClient";
 import {
-  FiPackage,
-  FiTruck,
-  FiCheckCircle,
-  FiXCircle,
-  FiSearch,
-  FiFilter,
-  FiUser,
-  FiHome,
-  FiMapPin,
-  FiPhone,
-  FiCalendar,
-  FiDollarSign,
-  FiCreditCard,
-  FiChevronRight,
-  FiArrowLeft,
-  FiMail,
-  FiEdit,
-  FiSave,
-  FiLoader,
-  FiRefreshCw
-} from "react-icons/fi";
+  Package,
+  Truck,
+  CheckCircle,
+  XCircle,
+  Search,
+  Filter,
+  User,
+  Home,
+  MapPin,
+  Phone,
+  Calendar,
+  DollarSign,
+  CreditCard,
+  ChevronRight,
+  ArrowLeft,
+  Mail,
+  Edit,
+  Save,
+  Loader,
+  RefreshCw,
+  X
+} from "lucide-react";
 
 const OrdersPage = () => {
   const [orders, setOrders] = useState<any[]>([]);
@@ -253,13 +254,13 @@ const OrdersPage = () => {
     
     switch (payment_status) {
       case 'completed':
-        return <span className={`${baseClasses} bg-green-100 text-green-800`}><FiCheckCircle className="mr-1.5" />Completed</span>;
+        return <span className={`${baseClasses} bg-green-100 text-green-800`}><CheckCircle className="mr-1.5" size={14} />Completed</span>;
       case 'processing':
-        return <span className={`${baseClasses} bg-blue-100 text-blue-800`}><FiTruck className="mr-1.5" />Processing</span>;
+        return <span className={`${baseClasses} bg-blue-100 text-blue-800`}><Truck className="mr-1.5" size={14} />Processing</span>;
       case 'cancelled':
-        return <span className={`${baseClasses} bg-red-100 text-red-800`}><FiXCircle className="mr-1.5" />Cancelled</span>;
+        return <span className={`${baseClasses} bg-red-100 text-red-800`}><XCircle className="mr-1.5" size={14} />Cancelled</span>;
       default:
-        return <span className={`${baseClasses} bg-yellow-100 text-yellow-800`}><FiPackage className="mr-1.5" />Pending</span>;
+        return <span className={`${baseClasses} bg-yellow-100 text-yellow-800`}><Package className="mr-1.5" size={14} />Pending</span>;
     }
   };
 
@@ -372,7 +373,7 @@ const OrdersPage = () => {
           onClick={() => setSelectedOrder(null)}
           className="mb-6 flex items-center text-[#e6d281] hover:text-[#d4c070] transition-colors"
         >
-          <FiArrowLeft className="mr-2" size={18} />
+          <ArrowLeft className="mr-2" size={18} />
           Back to Orders
         </button>
 
@@ -380,7 +381,7 @@ const OrdersPage = () => {
           <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex justify-between items-center">
             <span>{error}</span>
             <button onClick={() => setError(null)} className="text-red-800">
-              <FiXCircle size={20} />
+              <X size={20} />
             </button>
           </div>
         )}
@@ -395,7 +396,7 @@ const OrdersPage = () => {
                   Order #{selectedOrder.id}
                 </h3>
                 <div className="flex items-center mt-1 text-sm text-gray-500">
-                  <FiCalendar className="mr-1.5" size={14} />
+                  <Calendar className="mr-1.5" size={14} />
                   {formatDate(selectedOrder.created_at)}
                 </div>
               </div>
@@ -413,9 +414,9 @@ const OrdersPage = () => {
                     <option value="cancelled">Cancelled</option>
                   </select>
                   {updatingStatus === selectedOrder.id ? (
-                    <FiLoader className="absolute right-2 top-1/2 transform -translate-y-1/2 animate-spin text-gray-400" size={16} />
+                    <Loader className="absolute right-2 top-1/2 transform -translate-y-1/2 animate-spin text-gray-400" size={16} />
                   ) : (
-                    <FiEdit className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                    <Edit className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                   )}
                 </div>
                 {getPaymentStatusBadge(selectedOrder.payment_status || 'pending')}
@@ -511,7 +512,7 @@ const OrdersPage = () => {
       <div className="mb-8 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <div className="p-3 rounded-lg bg-[#f8f5e8]">
-            <FiPackage className="text-[#e6d281]" size={24} />
+            <Package className="text-[#e6d281]" size={24} />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Order Management</h1>
@@ -523,7 +524,7 @@ const OrdersPage = () => {
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 bg-[#e6d281] text-white rounded-lg hover:bg-[#d4c070] disabled:opacity-50 transition-colors"
         >
-          <FiRefreshCw className={loading ? "animate-spin" : ""} />
+          <RefreshCw className={loading ? "animate-spin" : ""} size={16} />
           Refresh
         </button>
       </div>
@@ -532,7 +533,7 @@ const OrdersPage = () => {
         <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex justify-between items-center">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="text-red-800">
-            <FiXCircle size={20} />
+            <X size={20} />
           </button>
         </div>
       )}
@@ -542,7 +543,7 @@ const OrdersPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FiSearch className="text-gray-400" size={18} />
+              <Search className="text-gray-400" size={18} />
             </div>
             <input
               type="text"
@@ -555,7 +556,7 @@ const OrdersPage = () => {
           
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FiFilter className="text-gray-400" size={18} />
+              <Filter className="text-gray-400" size={18} />
             </div>
             <select
               className="pl-10 w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e6d281] focus:border-transparent appearance-none"
@@ -588,7 +589,7 @@ const OrdersPage = () => {
         </div>
       ) : filteredOrders.length === 0 ? (
         <div className="bg-white p-12 rounded-xl shadow-sm border border-gray-200 text-center">
-          <FiPackage className="mx-auto text-gray-300 mb-4" size={48} />
+          <Package className="mx-auto text-gray-300 mb-4" size={48} />
           <h3 className="text-lg font-medium text-gray-700 mb-1">No orders found</h3>
           <p className="text-gray-500">Try adjusting your search or filter criteria</p>
         </div>
@@ -645,7 +646,7 @@ const OrdersPage = () => {
 </h3>
 
                     <p className="text-sm text-gray-600 mt-1 flex items-center">
-                      <FiUser className="mr-1.5" size={14} />
+                      <User className="mr-1.5" size={14} />
                       {customerName}
                     </p>
                   </div>
@@ -667,7 +668,7 @@ const OrdersPage = () => {
                   <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                     <div>
                       <p className="text-sm font-medium text-gray-700 flex items-center">
-                        <FiDollarSign className="mr-1" size={14} />
+                        <DollarSign className="mr-1" size={14} />
                         ${order.payment || '0.00'}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
@@ -688,13 +689,13 @@ const OrdersPage = () => {
                           <option value="cancelled">Cancelled</option>
                         </select>
                         {updatingStatus === order.id ? (
-                          <FiLoader className="absolute right-1 top-1/2 transform -translate-y-1/2 animate-spin text-gray-400" size={12} />
+                          <Loader className="absolute right-1 top-1/2 transform -translate-y-1/2 animate-spin text-gray-400" size={12} />
                         ) : (
-                          <FiEdit className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
+                          <Edit className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
                         )}
                       </div>
                       {getPaymentStatusBadge(order.payment_status || 'pending')}
-                      <FiChevronRight 
+                      <ChevronRight 
                         className="ml-1 text-gray-400 group-hover:text-[#e6d281] transition-colors cursor-pointer" 
                         size={18}
                         onClick={() => setSelectedOrder(order)}

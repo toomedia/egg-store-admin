@@ -998,7 +998,7 @@ const Page = () => {
               <div className="p-6">
                 <div className="flex flex-col lg:flex-row gap-6">
                   <div className="w-full">
-                    <div className="flex flex-col md:flex-row justify-between items-start">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
                       <div className="mb-4 md:mb-0">
                         <div className="mb-3">
                           <p className="text-xs text-gray-500 mb-1 flex items-center">
@@ -1009,7 +1009,7 @@ const Page = () => {
                             {item.preset_name?.en_name || 'Untitled Preset'}
                           </h2>
                         </div>
-                        <div className="mb-4">
+                        <div className="mb-4 md:mb-0">
                           <p className="text-xs text-gray-500 mb-1 flex items-center">
                             <Tag className="mr-1" size={14} />
                             German Title
@@ -1041,7 +1041,7 @@ const Page = () => {
                             {deletingId === item.id ? 'Deleting...' : 'Delete'}
                           </button>
                         </div>
-                        <div className="flex flex-col md:items-end gap-2">
+                        <div className="flex flex-col md:items-end gap-2 mt-2 md:mt-0">
                           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#e6d281] text-gray-800">
                             {item.category || 'Uncategorized'}
                           </span>
@@ -1166,4 +1166,3 @@ const Page = () => {
 };
 
 export default Page;
-
