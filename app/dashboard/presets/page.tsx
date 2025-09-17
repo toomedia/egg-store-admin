@@ -67,6 +67,8 @@ const DB_NAME = 'PresetsDB';
 const STORE_NAME = 'presets';
 const ALL_PRESETS_KEY = 'allPresets';
 
+
+
 // IndexedDB utility functions
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
