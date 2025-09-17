@@ -16,6 +16,7 @@ import {
   Check,
   Loader2
 } from "lucide-react"
+
 interface PresetName {
   en_name: string;
   de_name: string;
@@ -36,6 +37,7 @@ interface PresetImage {
   previewUrl: string;
   isExisting?: boolean;
   originalUrl?: string;
+  markedForDeletion?: boolean;
 }
 
 interface Preset {
@@ -66,8 +68,6 @@ interface FormData {
 const DB_NAME = 'PresetsDB';
 const STORE_NAME = 'presets';
 const ALL_PRESETS_KEY = 'allPresets';
-
-
 
 // IndexedDB utility functions
 const openDB = (): Promise<IDBDatabase> => {
@@ -123,7 +123,7 @@ const Page = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [dataSource, setDataSource] = useState<string>(''); // Track data source
+  const [dataSource, setDataSource] = useState<string>('');
   const categories = ['Nature', 'Abstract', 'Easter', 'Animals', 'Holiday'];
 
   // Form state
@@ -147,73 +147,73 @@ const Page = () => {
   
   const filters = ['Floral', 'Geometric', 'Minimalist', 'Colorful', 'Vintage'];
 
-useEffect(() => {
-  const fetchAllPresets = async () => {
-    try {
-      let allPresets: any[] = [];
-      setDataSource('Supabase');
-      
-      const { data, error } = await supabase.from('presets').select('*');
-      if (error) {
-        console.error("Error fetching presets:", error);
-        return;
-      }
-      
-      allPresets = data || [];
-      
-      // Save to IndexedDB
+  useEffect(() => {
+    const fetchAllPresets = async () => {
       try {
-        await setItem(ALL_PRESETS_KEY, allPresets);
-      } catch (indexedDBError) {
-        console.error("Error saving to IndexedDB:", indexedDBError);
-      }
-
-      setPreset(allPresets);
-    } catch (err) {
-      console.error("Unexpected error:", err);
-    }
-  };
-
-  fetchAllPresets();
-
-  const channel = supabase
-    .channel('public:presets')  
-    .on(
-      'postgres_changes',
-      { 
-        event: '*',  
-        schema: 'public', 
-        table: 'presets' 
-      },
-      async (payload) => {
-        setDataSource('Supabase Realtime');
-
-        const { data, error } = await supabase.from('presets').select('*');
+        let allPresets: any[] = [];
+        setDataSource('Supabase');
         
+        const { data, error } = await supabase.from('presets').select('*');
         if (error) {
-          console.error("Error refetching presets:", error);
+          console.error("Error fetching presets:", error);
           return;
         }
         
-        const updatedPresets = data || [];
+        allPresets = data || [];
         
-        // Update IndexedDB
+        // Save to IndexedDB
         try {
-          await setItem(ALL_PRESETS_KEY, updatedPresets);
+          await setItem(ALL_PRESETS_KEY, allPresets);
         } catch (indexedDBError) {
-          console.error("Error updating IndexedDB:", indexedDBError);
+          console.error("Error saving to IndexedDB:", indexedDBError);
         }
-        
-        setPreset(updatedPresets as Preset[]);
-      }
-    )
-    .subscribe();
 
-  // Cleanup on unmount
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [currentView]);
+        setPreset(allPresets);
+      } catch (err) {
+        console.error("Unexpected error:", err);
+      }
+    };
+
+    fetchAllPresets();
+
+    const channel = supabase
+      .channel('public:presets')  
+      .on(
+        'postgres_changes',
+        { 
+          event: '*',  
+          schema: 'public', 
+          table: 'presets' 
+        },
+        async (payload) => {
+          setDataSource('Supabase Realtime');
+
+          const { data, error } = await supabase.from('presets').select('*');
+          
+          if (error) {
+            console.error("Error refetching presets:", error);
+            return;
+          }
+          
+          const updatedPresets = data || [];
+          
+          // Update IndexedDB
+          try {
+            await setItem(ALL_PRESETS_KEY, updatedPresets);
+          } catch (indexedDBError) {
+            console.error("Error updating IndexedDB:", indexedDBError);
+          }
+          
+          setPreset(updatedPresets as Preset[]);
+        }
+      )
+      .subscribe();
+
+    // Cleanup on unmount
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentView]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -236,24 +236,60 @@ useEffect(() => {
     setIsLoading(true);
     e.preventDefault();
     
-    if (formData.images.length === 0) {
+    // Calculate active images (not marked for deletion)
+    const activeImages = formData.images.filter(img => !img.markedForDeletion);
+    
+    if (activeImages.length === 0) {
       alert("Please upload at least one image.");
       setIsLoading(false);
       return;
     }
-  
-    if (formData.images.length !== parseInt(String(formData.size.value))) {
-      alert("Please upload the correct number of images for the selected size.");
+
+    if (activeImages.length !== parseInt(String(formData.size.value))) {
+      alert(`Please ensure you have exactly ${formData.size.value} images. Currently you have ${activeImages.length} active images.`);
       setIsLoading(false);
       return;
     }
   
     try {
+      // First, delete any images marked for deletion
+      const imagesToDelete = formData.images.filter(
+        img => img.isExisting && img.markedForDeletion
+      );
+      
+      console.log("Images marked for deletion:", imagesToDelete);
+      
+      if (imagesToDelete.length > 0) {
+        const imagePaths = imagesToDelete.map(img => {
+          if (!img.originalUrl) return null;
+          const urlParts = img.originalUrl.split('/');
+          return `presets/${urlParts[urlParts.length - 1]}`;
+        }).filter(Boolean) as string[];
+        
+        console.log("Deleting image paths from storage:", imagePaths);
+        
+        if (imagePaths.length > 0) {
+          const { error: storageError } = await supabase.storage
+            .from('presets')
+            .remove(imagePaths);
+            
+          if (storageError) {
+            console.error("Error deleting images from storage:", storageError);
+          } else {
+            console.log("Successfully deleted images from storage");
+          }
+        }
+      }
+      
+      // Upload new images
       const uploadedImageUrls: string[] = [];
 
       for (let image of formData.images) {
+        // Skip images marked for deletion
+        if (image.markedForDeletion) continue;
+        
         if (image.isExisting && image.originalUrl) {
-          // Keep existing image URL
+          // Keep existing image URL (if not marked for deletion)
           uploadedImageUrls.push(image.originalUrl);
         } else if (image.fileObject) {
           // Upload new image
@@ -267,6 +303,7 @@ useEffect(() => {
             .upload(filePath, file);
 
           if (uploadError) {
+            console.error("Error uploading image:", uploadError);
             formData.images.forEach(img => {
               if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
             });
@@ -279,10 +316,13 @@ useEffect(() => {
             .getPublicUrl(filePath);
 
           uploadedImageUrls.push(publicUrlData.publicUrl);
+          console.log("Uploaded new image:", publicUrlData.publicUrl);
         }
       }
   
-      formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
+      formData.images.forEach(img => {
+        if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
+      });
   
       let data: any = null;
       let error: any = null;
@@ -364,8 +404,6 @@ useEffect(() => {
       }
   
       if (error) {
-       
-       
         alert(`Failed to ${editingId ? 'update' : 'create'} preset: ${error.message}`);
         setIsLoading(false);
         return;
@@ -387,13 +425,17 @@ useEffect(() => {
       try {
         await setItem(ALL_PRESETS_KEY, updatedPresets);
       } catch (indexedDBError) {
+        console.error("Error updating IndexedDB:", indexedDBError);
       }
       
       setCurrentView("list");
       setEditingId(null);
   
     } catch (err) {
-      formData.images.forEach(img => URL.revokeObjectURL(img.previewUrl));
+      console.error("Unexpected error in handleSubmit:", err);
+      formData.images.forEach(img => {
+        if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
+      });
     } finally {
       setIsLoading(false);
     }
@@ -419,6 +461,7 @@ useEffect(() => {
           .remove(imagePaths);
 
         if (storageError) {
+          console.error("Error deleting images from storage:", storageError);
         }
       }
       const { error } = await supabase
@@ -435,12 +478,13 @@ useEffect(() => {
       try {
         await setItem(ALL_PRESETS_KEY, updatedPresets);
       } catch (indexedDBError) {
-        
+        console.error("Error updating IndexedDB:", indexedDBError);
       }
       
       alert("Preset deleted successfully!");
 
     } catch (err) {
+      console.error("Error in handleDelete:", err);
       alert("An unexpected error occurred. Please try again.");
     } finally {
       setDeletingId(null);
@@ -454,7 +498,8 @@ useEffect(() => {
         fileObject: null, 
         previewUrl: imageUrl,
         isExisting: true, 
-        originalUrl: imageUrl
+        originalUrl: imageUrl,
+        markedForDeletion: false
       }));
       
       setFormData({
@@ -470,6 +515,44 @@ useEffect(() => {
       });
       setEditingId(id);
       setCurrentView('create');
+    }
+  };
+
+  // Function to handle image removal
+  const handleImageRemove = (index: number) => {
+    const imageToRemove = formData.images[index];
+    
+    // Check if removing this image would make the count less than required
+    const currentImageCount = formData.images.filter(img => !img.markedForDeletion).length;
+    const requiredImageCount = parseInt(String(formData.size.value));
+    
+    // If it's an existing image and we're not already at the minimum
+    if (imageToRemove.isExisting && currentImageCount <= requiredImageCount) {
+      // Show confirmation dialog
+      if (!confirm("Removing this image would make your preset incomplete. You need to add a replacement image to maintain the required preset size. Are you sure you want to remove it?")) {
+        return; // User canceled the removal
+      }
+    }
+    
+    // If it's an existing image, mark it for deletion instead of removing immediately
+    if (imageToRemove.isExisting) {
+      setFormData(prev => ({
+        ...prev,
+        images: prev.images.map((img, i) => 
+          i === index ? { ...img, markedForDeletion: true } : img
+        )
+      }));
+      console.log("Marked existing image for deletion:", imageToRemove.originalUrl);
+    } else {
+      // If it's a new image (not yet uploaded), just remove it
+      if (imageToRemove.fileObject) {
+        URL.revokeObjectURL(imageToRemove.previewUrl);
+      }
+      setFormData(prev => ({
+        ...prev,
+        images: prev.images.filter((_, i) => i !== index)
+      }));
+      console.log("Removed new image from form");
     }
   };
 
@@ -764,7 +847,8 @@ useEffect(() => {
                         if (e.target.files && e.target.files.length > 0) {
                           const filesArray = Array.from(e.target.files).map(file => ({
                             fileObject: file,
-                            previewUrl: URL.createObjectURL(file)
+                            previewUrl: URL.createObjectURL(file),
+                            isExisting: false
                           }));
                           setFormData(prev => ({
                             ...prev,
@@ -794,39 +878,46 @@ useEffect(() => {
               <div className="mt-6">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
                   <ImageIcon className="mr-2" size={16} />
-                  Selected Images ({formData.images.length}/{formData.size.value || '0'})
+                  Selected Images ({formData.images.filter(img => !img.markedForDeletion).length}/{formData.size.value || '0'})
                   {editingId && (
                     <span className="ml-2 text-xs text-blue-600">
-                      (Existing: {formData.images.filter(img => img.isExisting).length}, New: {formData.images.filter(img => !img.isExisting).length})
+                      (Existing: {formData.images.filter(img => img.isExisting && !img.markedForDeletion).length}, 
+                      New: {formData.images.filter(img => !img.isExisting).length},
+                      To be deleted: {formData.images.filter(img => img.markedForDeletion).length})
                     </span>
                   )}
                 </h3>
+                
+                {formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== parseInt(String(formData.size.value)) && (
+                  <p className="text-xs text-red-500 mt-2 mb-3">
+                    ⚠️ Warning: You need exactly {formData.size.value} images for this preset size. 
+                    Currently you have {formData.images.filter(img => !img.markedForDeletion).length} active images.
+                  </p>
+                )}
+                
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                   {formData.images.map((image, index) => (
                     <div key={index} className="relative group">
-                      <div className="aspect-square overflow-hidden rounded-md border border-gray-200">
+                      <div className={`aspect-square overflow-hidden rounded-md border ${image.markedForDeletion ? 'border-red-500 opacity-50' : 'border-gray-200'}`}>
                         <img 
                           src={image.previewUrl} 
                           alt={`Preview ${index}`} 
                           className="w-full h-full object-cover"
                         />
-                        {image.isExisting && (
+                        {image.isExisting && !image.markedForDeletion && (
                           <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
                             Existing
+                          </div>
+                        )}
+                        {image.markedForDeletion && (
+                          <div className="absolute top-2 left-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                            To Delete
                           </div>
                         )}
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (image.fileObject) {
-                            URL.revokeObjectURL(image.previewUrl);
-                          }
-                          setFormData(prev => ({
-                            ...prev,
-                            images: prev.images.filter((_, i) => i !== index)
-                          }));
-                        }}
+                        onClick={() => handleImageRemove(index)}
                         className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
                       >
                         <X size={12} />
@@ -879,6 +970,7 @@ useEffect(() => {
     );
   }
 
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
@@ -897,6 +989,7 @@ useEffect(() => {
           </button>
         </div>
       </div>
+ 
   
       {preset.length > 0 ? (
         <div className="grid grid-cols-1 gap-6">
@@ -1073,3 +1166,4 @@ useEffect(() => {
 };
 
 export default Page;
+
