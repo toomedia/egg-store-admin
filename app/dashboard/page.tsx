@@ -624,66 +624,63 @@ const processUserGrowthData = (usersData: any[]) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {/* Orders by Status */}
-        <div className="bg-white rounded-xl shadow overflow-hidden">
-          <div 
-            className="flex justify-between items-center p-5 cursor-pointer"
-            onClick={() => toggleSection('ordersStatus')}
-          >
-            <h2 className="font-semibold text-xl flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-[#e6d281]" />
-              Orders by Status
-            </h2>
-            {expandedSections.ordersStatus ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </div>
-          {expandedSections.ordersStatus && (
-            <div className="p-5 pt-0">
-              <div className="flex items-center justify-center mb-4">
-                <div className="h-48 w-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={orderStatusData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={2}
-                        dataKey="value"
-                        label={({ name, percent }) => `${name}: ${((percent as number) * 100).toFixed(0)}%`}
-                        labelLine={false}
-                      >
-                        {orderStatusData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        formatter={(value) => [`${value} orders`, '']}
-                        contentStyle={{ 
-                          backgroundColor: 'white', 
-                          border: 'none', 
-                          borderRadius: '0.5rem',
-                          color: 'white'
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {orderStatusData.map((status, index) => (
-                  <StatusRow
-                    key={index}
-                    color={status.color}
-                    label={status.name}
-                    count={status.value}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
+  {/* Orders by Status */}
+<div className="bg-white rounded-xl shadow">
+  <div 
+    className="flex justify-between items-center p-5 cursor-pointer"
+    onClick={() => toggleSection('ordersStatus')}
+  >
+    <h2 className="font-semibold text-xl flex items-center gap-2">
+      <CreditCard className="w-5 h-5 text-[#e6d281]" />
+      Orders by Status
+    </h2>
+    {expandedSections.ordersStatus ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+  </div>
+  {expandedSections.ordersStatus && (
+    <div className="p-5 pt-0">
+      <div className="flex items-center justify-center mb-4 min-h-[280px]">
+        <ResponsiveContainer width="100%" height={280}>
+          <PieChart>
+            <Pie
+              data={orderStatusData}
+              cx="50%"
+              cy="50%"
+              innerRadius={70}
+              outerRadius={90}
+              paddingAngle={2}
+              dataKey="value"
+              label={({ name, percent }) => `${name}: ${((percent as number) * 100).toFixed(0)}%`}
+              labelLine={false}
+            >
+              {orderStatusData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+        <Tooltip 
+  formatter={(value) => [`${value} orders`, '']}
+  contentStyle={{ 
+    backgroundColor: '#f9fafb', 
+    border: '1px solid #e5e7eb', 
+    borderRadius: '0.5rem',
+    color: '#374151'
+  }}
+/>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="space-y-2">
+        {orderStatusData.map((status, index) => (
+          <StatusRow
+            key={index}
+            color={status.color}
+            label={status.name}
+            count={status.value}
+          />
+        ))}
+      </div>
+    </div>
+  )}
+</div>
         {/* Best Selling Presets */}
         <div className="bg-white rounded-xl shadow overflow-hidden">
           <div 
