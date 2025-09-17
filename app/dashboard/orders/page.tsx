@@ -478,22 +478,21 @@ const OrdersPage = () => {
               )}
               
               {/* Egg Grid - 6x6 layout */}
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Egg Designs Preview</h4>
-                <div className="grid grid-cols-6 gap-2">
-                  {eggGridImages.map((image, index) => (
-                    <div key={index} className="aspect-square bg-gray-50 rounded border flex items-center justify-center overflow-hidden">
-                      <img
-                        src={image}
-                        alt={`Egg design ${index + 1}`}
-                        className="w-full h-full object-contain p-1"
-                        onError={(e) => e.currentTarget.src = "/placeholder.png"}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
+      <div className="mb-6">
+  <h4 className="text-sm font-medium text-gray-700 mb-3">Egg Designs Preview</h4>
+  <div className="grid grid-cols-6 gap-2 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+    {eggGridImages.map((image, index) => (
+      <div key={index} className="aspect-square bg-gray-50 rounded border overflow-hidden">
+        <img
+          src={image}
+          alt={`Egg design ${index + 1}`}
+          className="w-full h-full object-cover"
+          onError={(e) => e.currentTarget.src = "/placeholder.png"}
+        />
+      </div>
+    ))}
+  </div>
+</div>
               {/* Quantity Summary */}
               <div className="text-sm text-gray-800">
                 Total Quantity: {designs.reduce((sum, d) => sum + (d?.quantity || 1), 0)}
