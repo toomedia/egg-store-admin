@@ -327,11 +327,11 @@ const OrdersPage = () => {
     if (!Array.isArray(designs) || designs.length === 0) return images;
   
     for (const design of designs) {
-      if (Array.isArray(design?.images) && design.images.length > 0) {
-        // Shuffle the images and take up to `count`
-        const shuffled = [...design.images].sort(() => 0.5 - Math.random());
-        images.push(...shuffled.slice(0, count));
-      } else if (design?.image) {
+       if (Array.isArray(design?.images) && design.images.length > 0) {
+         // Shuffle the images and take up to `count`
+         const shuffled = [...design.images].sort(() => 0.5 - Math.random());
+         images.push(...shuffled.slice(0, count));
+       } else if (design?.image) {
         images.push(design.image);
       }
     }
