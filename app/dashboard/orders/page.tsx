@@ -687,29 +687,36 @@ const OrdersPage = () => {
                   onClick={() => setSelectedOrder(order)}
                 >
                  <div className="grid grid-cols-4 gap-2">
-      {randomImages.map((image, idx) => {
-        console.log("🚀 ~ image:", image);
-        return (
-          <div
-            key={idx}
-            className="relative aspect-square rounded-lg overflow-hidden bg-white"
-          >
-            <FallbackImage
-              src={image}
-              alt={`Preset image`}
-              fill
-              sizes="(max-width: 768px) 100vw, 150px"
-              style={{ objectFit: "cover", padding: "0.25rem" }}
-            />
+                 {randomImages.map((image, idx) => {
+  console.log("🚀 ~ image:", image);
+  return (
+    <div
+      key={idx}
+      className="relative aspect-square rounded-lg overflow-hidden bg-white"
+    >
+      <Image
+        src={image || "/placeholder.png"}
+        alt={`Preset image`}
+        fill
+        sizes="(max-width: 768px) 100vw, 150px"
+        style={{ objectFit: "cover", padding: "0.25rem" }}
+        onError={(e) => {
+          const target = e.currentTarget as HTMLImageElement;
+          if (target.src !== "/placeholder.png") {
+            target.src = "/placeholder.png";
+          }
+        }}
+      />
 
-            {idx === 5 && designs.length > 6 && (
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs font-medium">
-                +{designs.length - 5}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {idx === 5 && designs.length > 6 && (
+        <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs font-medium">
+          +{designs.length - 5}
+        </div>
+      )}
+    </div>
+  );
+})}
+
     </div>
                 </div>
 
