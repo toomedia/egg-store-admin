@@ -40,6 +40,7 @@ interface PresetImage {
   markedForDeletion?: boolean;
 }
 
+
 interface Preset {
   id: string;
   preset_name: PresetName;
