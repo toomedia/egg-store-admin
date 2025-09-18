@@ -140,10 +140,11 @@ const OrdersPage = () => {
     const [imgSrc, setImgSrc] = useState(src);
   
     return (
-      <Image
+      <img
         {...props}
         src={imgSrc || fallbackSrc}
         alt={alt}
+        className="w-full h-full object-cover p-1"
         onError={() => setImgSrc(fallbackSrc)}
       />
     );
@@ -537,7 +538,7 @@ const OrdersPage = () => {
                       key={index}
                       className="aspect-square bg-gray-50 rounded border overflow-hidden"
                     >
-                      <Image
+                      <img
                         src={image}
                         alt={`Egg design ${index + 1}`}
                         className="w-full h-full object-cover"
@@ -697,9 +698,6 @@ const OrdersPage = () => {
             <FallbackImage
               src={image}
               alt={`Preset image`}
-              fill
-              sizes="(max-width: 768px) 100vw, 150px"
-              style={{ objectFit: "cover", padding: "0.25rem" }}
             />
 
             {idx === 5 && designs.length > 6 && (
