@@ -133,7 +133,7 @@ const OrdersPage = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedOrder]);
+  }, []); // Remove selectedOrder dependency to prevent infinite re-renders
 
 
   const FallbackImage = ({ src, alt, fallbackSrc = "/placeholder.png", ...props }: any) => {
