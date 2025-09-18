@@ -190,10 +190,9 @@ const OrdersPage = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedOrder]);
+  }, []); // Remove selectedOrder dependency to prevent infinite re-renders
 
-
-  const FallbackImage = ({ src, alt, fallbackSrc = "/placeholder.png", ...props }) => {
+  const FallbackImage = ({ src, alt, fallbackSrc = "/placeholder.png", ...props }: any) => {
     const [imgSrc, setImgSrc] = useState(src);
   
     return (
@@ -384,11 +383,17 @@ const OrdersPage = () => {
     if (!Array.isArray(designs) || designs.length === 0) return images;
   
     for (const design of designs) {
-      if (Array.isArray(design?.images) && design.images.length > 0) {
-        // Shuffle the images and take up to `count`
-        const shuffled = [...design.images].sort(() => 0.5 - Math.random());
-        images.push(...shuffled.slice(0, count));
-      } else if (design?.image) {
+      if (Array.isArray(design?.preset_images) && design.preset_images.length > 0) {
+        // Filter out empty or invalid images
+        const validImages = design.preset_images.filter((img: any) => 
+          img && typeof img === 'string' && img.trim() !== ''
+        );
+        if (validImages.length > 0) {
+          // Shuffle the images and take up to `count`
+          const shuffled = [...validImages].sort(() => 0.5 - Math.random());
+          images.push(...shuffled.slice(0, count));
+        }
+      } else if (design?.image && typeof design.image === 'string' && design.image.trim() !== '') {
         images.push(design.image);
       }
     }
