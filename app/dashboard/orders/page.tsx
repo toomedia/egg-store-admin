@@ -53,19 +53,19 @@ const OrdersPage = () => {
         let shouldFetchFromSupabase = true;
 
         // First try to get orders from IndexedDB
-        // try {
-        //   const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-        //   if (Array.isArray(storedOrders) && storedOrders.length > 0) {
-        //     allOrders = storedOrders;
-        //     shouldFetchFromSupabase = false;
-        //     console.log("🚀 Loaded orders from IndexedDB:", allOrders.length);
-        //   }
-        // } catch (indexedDBError) {
-        //   console.warn(
-        //     "IndexedDB not available or empty, fetching from Supabase:",
-        //     indexedDBError
-        //   );
-        // }
+        try {
+          const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
+          if (Array.isArray(storedOrders) && storedOrders.length > 0) {
+            allOrders = storedOrders;
+            shouldFetchFromSupabase = false;
+            console.log("🚀 Loaded orders from IndexedDB:", allOrders.length);
+          }
+        } catch (indexedDBError) {
+          console.warn(
+            "IndexedDB not available or empty, fetching from Supabase:",
+            indexedDBError
+          );
+        }
 
         if (shouldFetchFromSupabase) {
           console.log("Fetching orders from Supabase");
