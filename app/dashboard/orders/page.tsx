@@ -53,21 +53,22 @@ const OrdersPage = () => {
         let shouldFetchFromSupabase = true;
 
         // First try to get orders from IndexedDB
-        try {
-          const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-          if (Array.isArray(storedOrders) && storedOrders.length > 0) {
-            allOrders = storedOrders;
-            shouldFetchFromSupabase = false;
-            console.log("🚀 Loaded orders from IndexedDB:", allOrders.length);
-          }
-        } catch (indexedDBError) {
-          console.warn(
-            "IndexedDB not available or empty, fetching from Supabase:",
-            indexedDBError
-          );
-        }
+        // try {
+        //   const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
+        //   if (Array.isArray(storedOrders) && storedOrders.length > 0) {
+        //     allOrders = storedOrders;
+        //     shouldFetchFromSupabase = false;
+        //     console.log("🚀 Loaded orders from IndexedDB:", allOrders.length);
+        //   }
+        // } catch (indexedDBError) {
+        //   console.warn(
+        //     "IndexedDB not available or empty, fetching from Supabase:",
+        //     indexedDBError
+        //   );
+        // }
 
         if (shouldFetchFromSupabase) {
+          console.log("Fetching orders from Supabase");
           const { data, error } = await supabase
             .from("orders")
             .select("*")
@@ -107,7 +108,7 @@ const OrdersPage = () => {
       .channel("public:orders")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "orders" },
+        { event: "*", schema: "public", table: "orders" },
         async (payload) => {
           console.log("🚀 New order inserted:", payload.new);
           try {
@@ -124,64 +125,6 @@ const OrdersPage = () => {
             setOrders(updatedOrders);
           } catch (err) {
             console.error("Error handling insert:", err);
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "orders" },
-        async (payload) => {
-          console.log("Order updated:", payload.new);
-          try {
-            const storedOrders = await getItem(
-              DB_NAME,
-              STORE_NAME,
-              "allOrders"
-            );
-            const existingOrders: any[] = Array.isArray(storedOrders)
-              ? storedOrders
-              : [];
-            const updatedOrders = existingOrders.map((order) =>
-              order.id === payload.new.id ? { ...order, ...payload.new } : order
-            );
-            await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
-            setOrders(updatedOrders);
-
-            // Update selected order if it's the one being updated
-            if (selectedOrder && selectedOrder.id === payload.new.id) {
-              setSelectedOrder({ ...selectedOrder, ...payload.new });
-            }
-          } catch (err) {
-            console.error("Error handling update:", err);
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "orders" },
-        async (payload) => {
-          console.log("Order deleted:", payload.old);
-          try {
-            const storedOrders = await getItem(
-              DB_NAME,
-              STORE_NAME,
-              "allOrders"
-            );
-            const existingOrders: any[] = Array.isArray(storedOrders)
-              ? storedOrders
-              : [];
-            const updatedOrders = existingOrders.filter(
-              (order) => order.id !== payload.old.id
-            );
-            await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
-            setOrders(updatedOrders);
-
-            // Clear selected order if it's the one being deleted
-            if (selectedOrder && selectedOrder.id === payload.old.id) {
-              setSelectedOrder(null);
-            }
-          } catch (err) {
-            console.error("Error handling delete:", err);
           }
         }
       )
