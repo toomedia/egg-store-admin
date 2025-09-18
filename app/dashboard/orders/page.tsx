@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import Image from "next/image";
 import { getItem, setItem } from "@/utils/indexedDB";
 import { supabase } from "../../../utils/supabaseClient";
 import {
@@ -23,14 +24,14 @@ import {
   Save,
   Loader,
   RefreshCw,
-  X
+  X,
 } from "lucide-react";
 
 const OrdersPage = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,11 +39,11 @@ const OrdersPage = () => {
   const STORE_NAME = "orders";
 
   const paymentStatuses = [
-    { id: 'all', name: 'All Orders' },
-    { id: 'pending', name: 'Pending' },
-    { id: 'processing', name: 'Processing' },
-    { id: 'completed', name: 'Completed' },
-    { id: 'cancelled', name: 'Cancelled' },
+    { id: "all", name: "All Orders" },
+    { id: "pending", name: "Pending" },
+    { id: "processing", name: "Processing" },
+    { id: "completed", name: "Completed" },
+    { id: "cancelled", name: "Cancelled" },
   ];
 
   useEffect(() => {
@@ -50,7 +51,7 @@ const OrdersPage = () => {
       try {
         let allOrders: any[] = [];
         let shouldFetchFromSupabase = true;
-        
+
         // First try to get orders from IndexedDB
         try {
           const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
@@ -60,11 +61,17 @@ const OrdersPage = () => {
             console.log("🚀 Loaded orders from IndexedDB:", allOrders.length);
           }
         } catch (indexedDBError) {
-          console.warn("IndexedDB not available or empty, fetching from Supabase:", indexedDBError);
+          console.warn(
+            "IndexedDB not available or empty, fetching from Supabase:",
+            indexedDBError
+          );
         }
 
         if (shouldFetchFromSupabase) {
-          const { data, error } = await supabase.from("orders").select("*").order('created_at', { ascending: false });
+          const { data, error } = await supabase
+            .from("orders")
+            .select("*")
+            .order("created_at", { ascending: false });
           if (error) {
             console.error("🚀 Error fetching orders:", error);
             setError("Failed to load orders. Please refresh the page.");
@@ -72,7 +79,7 @@ const OrdersPage = () => {
             return;
           }
           allOrders = data || [];
-          
+
           // Store in IndexedDB for future use
           try {
             await setItem(DB_NAME, STORE_NAME, "allOrders", allOrders);
@@ -80,7 +87,7 @@ const OrdersPage = () => {
           } catch (indexedDBError) {
             console.warn("Could not save to IndexedDB:", indexedDBError);
           }
-          
+
           console.log("Fetched orders from Supabase:", allOrders.length);
         }
 
@@ -98,12 +105,20 @@ const OrdersPage = () => {
     // Realtime subscription for orders
     const channel = supabase
       .channel("public:orders")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" },
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "orders" },
         async (payload) => {
           console.log("🚀 New order inserted:", payload.new);
           try {
-            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-            const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
+            const storedOrders = await getItem(
+              DB_NAME,
+              STORE_NAME,
+              "allOrders"
+            );
+            const existingOrders: any[] = Array.isArray(storedOrders)
+              ? storedOrders
+              : [];
             const updatedOrders = [payload.new, ...existingOrders]; // Add new order to the beginning
             await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
             setOrders(updatedOrders);
@@ -112,18 +127,26 @@ const OrdersPage = () => {
           }
         }
       )
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" },
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "orders" },
         async (payload) => {
           console.log("Order updated:", payload.new);
           try {
-            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-            const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
-            const updatedOrders = existingOrders.map(order => 
+            const storedOrders = await getItem(
+              DB_NAME,
+              STORE_NAME,
+              "allOrders"
+            );
+            const existingOrders: any[] = Array.isArray(storedOrders)
+              ? storedOrders
+              : [];
+            const updatedOrders = existingOrders.map((order) =>
               order.id === payload.new.id ? { ...order, ...payload.new } : order
             );
             await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
             setOrders(updatedOrders);
-            
+
             // Update selected order if it's the one being updated
             if (selectedOrder && selectedOrder.id === payload.new.id) {
               setSelectedOrder({ ...selectedOrder, ...payload.new });
@@ -133,16 +156,26 @@ const OrdersPage = () => {
           }
         }
       )
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "orders" },
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "orders" },
         async (payload) => {
           console.log("Order deleted:", payload.old);
           try {
-            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
-            const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
-            const updatedOrders = existingOrders.filter(order => order.id !== payload.old.id);
+            const storedOrders = await getItem(
+              DB_NAME,
+              STORE_NAME,
+              "allOrders"
+            );
+            const existingOrders: any[] = Array.isArray(storedOrders)
+              ? storedOrders
+              : [];
+            const updatedOrders = existingOrders.filter(
+              (order) => order.id !== payload.old.id
+            );
             await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
             setOrders(updatedOrders);
-            
+
             // Clear selected order if it's the one being deleted
             if (selectedOrder && selectedOrder.id === payload.old.id) {
               setSelectedOrder(null);
@@ -159,44 +192,64 @@ const OrdersPage = () => {
     };
   }, [selectedOrder]);
 
-  const updateOrderPaymentStatus = async (orderId: string, newStatus: string) => {
+
+  const FallbackImage = ({ src, alt, fallbackSrc = "/placeholder.png", ...props }) => {
+    const [imgSrc, setImgSrc] = useState(src);
+  
+    return (
+      <Image
+        {...props}
+        src={imgSrc || fallbackSrc}
+        alt={alt}
+        onError={() => setImgSrc(fallbackSrc)}
+      />
+    );
+  };
+  
+
+  const updateOrderPaymentStatus = async (
+    orderId: string,
+    newStatus: string
+  ) => {
     setUpdatingStatus(orderId);
     setError(null);
     try {
       const { data, error } = await supabase
         .from("orders")
-        .update({ 
-          payment_status: newStatus, 
-          updated_at: new Date().toISOString() 
+        .update({
+          payment_status: newStatus,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", orderId)
         .select();
-        
+
       if (error) {
         console.error("Error updating order payment status:", error);
-        
+
         // Handle specific error cases
-        if (error.code === 'PGRST204') {
-          setError("Database schema issue. Please check if the 'payment_status' column exists in your orders table.");
+        if (error.code === "PGRST204") {
+          setError(
+            "Database schema issue. Please check if the 'payment_status' column exists in your orders table."
+          );
         } else {
           setError("Failed to update order payment status. Please try again.");
         }
       } else {
         console.log("Order payment status updated successfully:", data);
-        
+
         // Update local state immediately for better UX
-        const updatedOrders = orders.map(order => 
+        const updatedOrders = orders.map((order) =>
           order.id === orderId ? { ...order, payment_status: newStatus } : order
         );
         setOrders(updatedOrders);
-        
+
         // Update IndexedDB
         try {
           await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
         } catch (indexedDBError) {
           console.warn("Could not update IndexedDB:", indexedDBError);
         }
-        
+
         // Update selected order if it's the one being updated
         if (selectedOrder && selectedOrder.id === orderId) {
           setSelectedOrder({ ...selectedOrder, payment_status: newStatus });
@@ -214,21 +267,24 @@ const OrdersPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await supabase.from("orders").select("*").order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false });
       if (error) {
         console.error("Error refreshing orders:", error);
         setError("Failed to refresh orders. Please try again.");
         setLoading(false);
         return;
       }
-      
+
       const allOrders = data || [];
       try {
         await setItem(DB_NAME, STORE_NAME, "allOrders", allOrders);
       } catch (indexedDBError) {
         console.warn("Could not save to IndexedDB:", indexedDBError);
       }
-      
+
       setOrders(allOrders);
       setLoading(false);
     } catch (err) {
@@ -238,47 +294,72 @@ const OrdersPage = () => {
     }
   };
 
-  const filteredOrders = orders.filter(order => {
+  const filteredOrders = orders.filter((order) => {
     const search = searchQuery.toLowerCase();
     const matchesSearch =
-      (order.order_id?.toLowerCase() || '').includes(search) ||
-      (order.user_info?.firstName?.toLowerCase() || '').includes(search) ||
-      (order.user_info?.email?.toLowerCase() || '').includes(search);
+      (order.order_id?.toLowerCase() || "").includes(search) ||
+      (order.user_info?.firstName?.toLowerCase() || "").includes(search) ||
+      (order.user_info?.email?.toLowerCase() || "").includes(search);
 
-    const matchesStatus = paymentStatusFilter === 'all' || order.payment_status === paymentStatusFilter;
+    const matchesStatus =
+      paymentStatusFilter === "all" ||
+      order.payment_status === paymentStatusFilter;
     return matchesSearch && matchesStatus;
   });
 
   const getPaymentStatusBadge = (payment_status: string) => {
-    const baseClasses = "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium";
-    
+    const baseClasses =
+      "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium";
+
     switch (payment_status) {
-      case 'completed':
-        return <span className={`${baseClasses} bg-green-100 text-green-800`}><CheckCircle className="mr-1.5" size={14} />Completed</span>;
-      case 'processing':
-        return <span className={`${baseClasses} bg-blue-100 text-blue-800`}><Truck className="mr-1.5" size={14} />Processing</span>;
-      case 'cancelled':
-        return <span className={`${baseClasses} bg-red-100 text-red-800`}><XCircle className="mr-1.5" size={14} />Cancelled</span>;
+      case "completed":
+        return (
+          <span className={`${baseClasses} bg-green-100 text-green-800`}>
+            <CheckCircle className="mr-1.5" size={14} />
+            Completed
+          </span>
+        );
+      case "processing":
+        return (
+          <span className={`${baseClasses} bg-blue-100 text-blue-800`}>
+            <Truck className="mr-1.5" size={14} />
+            Processing
+          </span>
+        );
+      case "cancelled":
+        return (
+          <span className={`${baseClasses} bg-red-100 text-red-800`}>
+            <XCircle className="mr-1.5" size={14} />
+            Cancelled
+          </span>
+        );
       default:
-        return <span className={`${baseClasses} bg-yellow-100 text-yellow-800`}><Package className="mr-1.5" size={14} />Pending</span>;
+        return (
+          <span className={`${baseClasses} bg-yellow-100 text-yellow-800`}>
+            <Package className="mr-1.5" size={14} />
+            Pending
+          </span>
+        );
     }
   };
 
   const formatDate = (dateString: string) => {
-    if (!dateString) return 'Unknown date';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    if (!dateString) return "Unknown date";
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
   const getImage = (design: any) => {
     if (design?.preset_images?.length > 0) {
       // Select a random image from the preset_images array
-      const randomIndex = Math.floor(Math.random() * design.preset_images.length);
+      const randomIndex = Math.floor(
+        Math.random() * design.preset_images.length
+      );
       return design.preset_images[randomIndex];
     }
     if (design?.image) return design.image;
@@ -286,84 +367,83 @@ const OrdersPage = () => {
   };
 
   const getName = (design: any) => {
-    return design?.preset_name?.en_name || design?.name || 'Untitled Design';
+    return design?.preset_name?.en_name || design?.name || "Untitled Design";
   };
 
   const getCategory = (design: any) => {
-    return design?.preset_category?.en_category || design?.category || 'Uncategorized';
+    return (
+      design?.preset_category?.en_category ||
+      design?.category ||
+      "Uncategorized"
+    );
   };
 
-  // Function to get unique random images for each design
-  const getRandomImagesForDesigns = (designs: any[], count: number) => {
-    const selectedImages = [];
-    const availableImages = [];
-    
-    // Collect all available images from all designs
+  const getRandomImagesForDesigns = (designs: any[], count: number = 8) => {
+    const images: string[] = [];
+  
+    if (!Array.isArray(designs) || designs.length === 0) return images;
+  
     for (const design of designs) {
-      if (design?.preset_images?.length > 0) {
-        availableImages.push(...design.preset_images);
+      if (Array.isArray(design?.images) && design.images.length > 0) {
+        // Shuffle the images and take up to `count`
+        const shuffled = [...design.images].sort(() => 0.5 - Math.random());
+        images.push(...shuffled.slice(0, count));
       } else if (design?.image) {
-        availableImages.push(design.image);
+        images.push(design.image);
       }
     }
-    
-    // If no images available, return placeholder
-    if (availableImages.length === 0) {
-      return Array(count).fill("/placeholder.png");
+  
+    // Ensure we only return `count` items max
+    const final = images.slice(0, count);
+  
+    // If fewer than `count`, fill with placeholders
+    while (final.length < count) {
+      final.push("/placeholder.png");
     }
-    
-    // Select random unique images
-    const usedIndices = new Set();
-    while (selectedImages.length < count && selectedImages.length < availableImages.length) {
-      const randomIndex = Math.floor(Math.random() * availableImages.length);
-      if (!usedIndices.has(randomIndex)) {
-        selectedImages.push(availableImages[randomIndex]);
-        usedIndices.add(randomIndex);
-      }
-    }
-    
-    // If we need more images than available, fill with placeholders
-    while (selectedImages.length < count) {
-      selectedImages.push("/placeholder.png");
-    }
-    
-    return selectedImages;
+  
+    return final;
   };
-
+  
+  
   // Function to generate egg images for the grid
-  const generateEggGrid = (designs: any[]) => {
-    const totalEggs = 36; // 6x6 grid
-    const eggImages = [];
-    
-    // Collect all available egg images from all designs
-    const allEggImages = [];
-    for (const design of designs) {
-      if (design?.preset_images?.length > 0) {
-        allEggImages.push(...design.preset_images);
-      } else if (design?.image) {
-        allEggImages.push(design.image);
-      }
+ const generateEggGrid = (designs: any[]) => {
+  const totalEggs = 36; // 6x6 grid
+  const eggImages: string[] = [];
+
+  // Collect all images from designs
+  const allEggImages: string[] = [];
+  console.log("  ~ generateEggGrid ~ allEggImages:", allEggImages)
+  for (const design of designs) {
+    if (design?.images?.length > 0) {
+      allEggImages.push(...design.images);
+    } else if (design?.image) {
+      allEggImages.push(design.image);
     }
-    
-    // Fill the grid with eggs
-    for (let i = 0; i < totalEggs; i++) {
-      if (allEggImages.length > 0) {
-        // Use a random image from available eggs
-        const randomIndex = Math.floor(Math.random() * allEggImages.length);
-        eggImages.push(allEggImages[randomIndex]);
-      } else {
-        // Use placeholder if no images available
-        eggImages.push("/placeholder.png");
-      }
+  }
+
+  console.log("🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~🚀 ~ generateEggGrid ~ allEggImages:", allEggImages)
+  // Fill grid
+  for (let i = 0; i < totalEggs; i++) {
+    console.log("🚀 ~ generateEggGrid ~ totalEggs:", totalEggs)
+    if (allEggImages.length > 0) {
+      const randomIndex = Math.floor(Math.random() * allEggImages.length);
+      console.log("🚀 ~ generateEggGrid ~ randomIndex:", randomIndex)
+      eggImages.push(allEggImages[randomIndex]);
+    } else {
+      eggImages.push("/placeholder.png");
     }
-    
-    return eggImages;
-  };
+  }
+
+  return eggImages;
+};
+
 
   // ----------- ORDER DETAIL VIEW ------------
   if (selectedOrder) {
     const { user_info, preset_object } = selectedOrder;
-    const designs = Array.isArray(preset_object) ? preset_object : [preset_object];
+    const designs = Array.isArray(preset_object)
+      ? preset_object
+      : [preset_object];
     // Generate egg grid for the detail view
     const eggGridImages = generateEggGrid(designs);
 
@@ -392,7 +472,7 @@ const OrdersPage = () => {
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between">
               <div>
-                 <h3 className="text-sm font-medium text-gray-800 truncate cursor-pointer" >
+                <h3 className="text-sm font-medium text-gray-800 truncate cursor-pointer">
                   Order #{selectedOrder.id}
                 </h3>
                 <div className="flex items-center mt-1 text-sm text-gray-500">
@@ -403,8 +483,10 @@ const OrdersPage = () => {
               <div className="flex items-center gap-3 mt-2 md:mt-0">
                 <div className="relative">
                   <select
-                    value={selectedOrder.payment_status || 'pending'}
-                    onChange={(e) => updateOrderPaymentStatus(selectedOrder.id, e.target.value)}
+                    value={selectedOrder.payment_status || "pending"}
+                    onChange={(e) =>
+                      updateOrderPaymentStatus(selectedOrder.id, e.target.value)
+                    }
                     disabled={updatingStatus === selectedOrder.id}
                     className="appearance-none bg-white border border-gray-300 rounded-md py-2 px-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-[#e6d281] focus:border-transparent"
                   >
@@ -414,12 +496,20 @@ const OrdersPage = () => {
                     <option value="cancelled">Cancelled</option>
                   </select>
                   {updatingStatus === selectedOrder.id ? (
-                    <Loader className="absolute right-2 top-1/2 transform -translate-y-1/2 animate-spin text-gray-400" size={16} />
+                    <Loader
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 animate-spin text-gray-400"
+                      size={16}
+                    />
                   ) : (
-                    <Edit className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                    <Edit
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400"
+                      size={16}
+                    />
                   )}
                 </div>
-                {getPaymentStatusBadge(selectedOrder.payment_status || 'pending')}
+                {getPaymentStatusBadge(
+                  selectedOrder.payment_status || "pending"
+                )}
               </div>
             </div>
           </div>
@@ -427,33 +517,48 @@ const OrdersPage = () => {
           <div className="p-6">
             {/* Customer & Order Info Section */}
             <section className="mb-8">
-              <h2 className="text-lg font-medium text-gray-800 mb-4">Order Summary</h2>
-              
+              <h2 className="text-lg font-medium text-gray-800 mb-4">
+                Order Summary
+              </h2>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Customer Column */}
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">CUSTOMER</h3>
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">
+                    CUSTOMER
+                  </h3>
                   <p className="text-gray-800">{user_info?.fullName}</p>
                   <p className="text-gray-600 mt-1">{user_info?.email}</p>
-                  <p className="text-gray-600 mt-1">{user_info?.phone || 'No phone provided'}</p>
+                  <p className="text-gray-600 mt-1">
+                    {user_info?.phone || "No phone provided"}
+                  </p>
                 </div>
 
                 {/* Shipping Column */}
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">SHIPPING</h3>
-                  <p className="text-gray-800">{user_info?.address || 'No address provided'}</p>
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">
+                    SHIPPING
+                  </h3>
+                  <p className="text-gray-800">
+                    {user_info?.address || "No address provided"}
+                  </p>
                   <p className="text-gray-600">
-                    {user_info?.city}, {user_info?.state} {user_info?.postalCode}
+                    {user_info?.city}, {user_info?.state}{" "}
+                    {user_info?.postalCode}
                   </p>
                   <p className="text-gray-600">{user_info?.country}</p>
                 </div>
 
                 {/* Payment Column */}
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">PAYMENT</h3>
-                  <p className="text-gray-800 font-medium">${selectedOrder.payment || '0.00'}</p>
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">
+                    PAYMENT
+                  </h3>
+                  <p className="text-gray-800 font-medium">
+                    ${selectedOrder.payment || "0.00"}
+                  </p>
                   <p className="text-gray-600 mt-1">
-                    {selectedOrder.payment_method || 'Credit Card'}
+                    {selectedOrder.payment_method || "Credit Card"}
                   </p>
                 </div>
               </div>
@@ -462,7 +567,8 @@ const OrdersPage = () => {
             {/* Order Items Section */}
             <section>
               <h2 className="text-lg font-medium text-gray-800 mb-4">
-                {designs.length} {designs.length === 1 ? 'Item' : 'Items'} Purchased
+                {designs.length} {designs.length === 1 ? "Item" : "Items"}{" "}
+                Purchased
               </h2>
 
               {/* Product Name and Category (shown once) */}
@@ -476,26 +582,34 @@ const OrdersPage = () => {
                   </p>
                 </div>
               )}
-              
+
               {/* Egg Grid - 6x6 layout */}
-      <div className="mb-6">
-  <h4 className="text-sm font-medium text-gray-700 mb-3">Egg Designs Preview</h4>
-  <div className="grid grid-cols-6 gap-2 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-    {eggGridImages.map((image, index) => (
-      <div key={index} className="aspect-square bg-gray-50 rounded border overflow-hidden">
-        <img
-          src={image}
-          alt={`Egg design ${index + 1}`}
-          className="w-full h-full object-cover"
-          onError={(e) => e.currentTarget.src = "/placeholder.png"}
-        />
-      </div>
-    ))}
-  </div>
-</div>
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">
+                  Egg Designs Preview
+                </h4>
+                <div className="grid grid-cols-6 gap-2 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                  {eggGridImages.map((image, index) => (
+                    <div
+                      key={index}
+                      className="aspect-square bg-gray-50 rounded border overflow-hidden"
+                    >
+                      <Image
+                        src={image}
+                        alt={`Egg design ${index + 1}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) =>
+                          (e.currentTarget.src = "/placeholder.png")
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
               {/* Quantity Summary */}
               <div className="text-sm text-gray-800">
-                Total Quantity: {designs.reduce((sum, d) => sum + (d?.quantity || 1), 0)}
+                Total Quantity:{" "}
+                {designs.reduce((sum, d) => sum + (d?.quantity || 1), 0)}
               </div>
             </section>
           </div>
@@ -514,7 +628,9 @@ const OrdersPage = () => {
             <Package className="text-[#e6d281]" size={24} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Order Management</h1>
+            <h1 className="text-2xl font-bold text-gray-800">
+              Order Management
+            </h1>
             <p className="text-gray-600">View and manage customer orders</p>
           </div>
         </div>
@@ -552,7 +668,7 @@ const OrdersPage = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          
+
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Filter className="text-gray-400" size={18} />
@@ -563,7 +679,9 @@ const OrdersPage = () => {
               onChange={(e) => setPaymentStatusFilter(e.target.value)}
             >
               {paymentStatuses.map((status) => (
-                <option key={status.id} value={status.id}>{status.name}</option>
+                <option key={status.id} value={status.id}>
+                  {status.name}
+                </option>
               ))}
             </select>
           </div>
@@ -574,7 +692,10 @@ const OrdersPage = () => {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm animate-pulse">
+            <div
+              key={i}
+              className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm animate-pulse"
+            >
               <div className="flex gap-3 mb-4">
                 <div className="w-16 h-16 bg-gray-200 rounded-lg"></div>
                 <div className="w-16 h-16 bg-gray-200 rounded-lg"></div>
@@ -589,22 +710,28 @@ const OrdersPage = () => {
       ) : filteredOrders.length === 0 ? (
         <div className="bg-white p-12 rounded-xl shadow-sm border border-gray-200 text-center">
           <Package className="mx-auto text-gray-300 mb-4" size={48} />
-          <h3 className="text-lg font-medium text-gray-700 mb-1">No orders found</h3>
-          <p className="text-gray-500">Try adjusting your search or filter criteria</p>
+          <h3 className="text-lg font-medium text-gray-700 mb-1">
+            No orders found
+          </h3>
+          <p className="text-gray-500">
+            Try adjusting your search or filter criteria
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredOrders.map((order) => {
-            const designs = Array.isArray(order.preset_object) 
-              ? order.preset_object 
+            const designs = Array.isArray(order.preset_object)
+              ? order.preset_object
               : [order.preset_object];
-            
+            console.log("🚀 ~ designs:", designs)
+
             // Get six random images from all available images in the order
-            const randomImages = getRandomImagesForDesigns(designs, 6);
-            
-            const customerName = order.user_info?.firstName 
-              ? `${order.user_info.firstName} ${order.user_info.lastName || ''}` 
-              : 'Unknown Customer';
+            const randomImages = getRandomImagesForDesigns(designs, 8);
+            console.log("🚀 ~ randomImages:", randomImages)
+
+            const customerName = order.user_info?.firstName
+              ? `${order.user_info.firstName} ${order.user_info.lastName || ""}`
+              : "Unknown Customer";
 
             return (
               <div
@@ -612,37 +739,46 @@ const OrdersPage = () => {
                 className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-all group"
               >
                 {/* Images Section - 6 image grid */}
-                <div 
+                <div
                   className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer"
                   onClick={() => setSelectedOrder(order)}
                 >
-                  <div className="grid grid-cols-3 gap-2">
-                    {randomImages.map((image, idx) => (
-                      <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-white">
-                        <img
-                          src={image}
-                          alt={`Design ${idx + 1}`}
-                          className="w-full h-full object-contain p-1"
-                          onError={(e) => {
-                            e.currentTarget.src = "/placeholder.png";
-                          }}
-                        />
-                        {idx === 5 && designs.length > 6 && (
-                          <div className="absolute inset-0  bg-opacity-40 flex items-center justify-center text-white text-xs font-medium">
-                           
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                 <div className="grid grid-cols-4 gap-2">
+      {randomImages.map((image, idx) => {
+        console.log("🚀 ~ image:", image);
+        return (
+          <div
+            key={idx}
+            className="relative aspect-square rounded-lg overflow-hidden bg-white"
+          >
+            <FallbackImage
+              src={image}
+              alt={`Preset image`}
+              fill
+              sizes="(max-width: 768px) 100vw, 150px"
+              style={{ objectFit: "cover", padding: "0.25rem" }}
+            />
+
+            {idx === 5 && designs.length > 6 && (
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs font-medium">
+                +{designs.length - 5}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
                 </div>
 
                 {/* Order Info Section */}
                 <div className="p-5">
                   <div className="mb-4">
-                   <h3 className="text-sm font-medium text-gray-800 truncate cursor-pointer" onClick={() => setSelectedOrder(order)}>
-  Order #{order.id}
-</h3>
+                    <h3
+                      className="text-sm font-medium text-gray-800 truncate cursor-pointer"
+                      onClick={() => setSelectedOrder(order)}
+                    >
+                      Order #{order.id}
+                    </h3>
 
                     <p className="text-sm text-gray-600 mt-1 flex items-center">
                       <User className="mr-1.5" size={14} />
@@ -667,8 +803,8 @@ const OrdersPage = () => {
                   <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                     <div>
                       <p className="text-sm font-medium text-gray-700 flex items-center">
-                        <DollarSign className="mr-1" size={14} />
-                        ${order.payment || '0.00'}
+                        <DollarSign className="mr-1" size={14} />$
+                        {order.payment || "0.00"}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         {formatDate(order.created_at)}
@@ -677,8 +813,10 @@ const OrdersPage = () => {
                     <div className="flex items-center gap-2">
                       <div className="relative">
                         <select
-                          value={order.payment_status || 'pending'}
-                          onChange={(e) => updateOrderPaymentStatus(order.id, e.target.value)}
+                          value={order.payment_status || "pending"}
+                          onChange={(e) =>
+                            updateOrderPaymentStatus(order.id, e.target.value)
+                          }
                           disabled={updatingStatus === order.id}
                           className="appearance-none bg-white border border-gray-300 rounded-md py-1 px-2 pr-6 text-xs focus:outline-none focus:ring-1 focus:ring-[#e6d281] focus:border-transparent"
                         >
@@ -688,14 +826,20 @@ const OrdersPage = () => {
                           <option value="cancelled">Cancelled</option>
                         </select>
                         {updatingStatus === order.id ? (
-                          <Loader className="absolute right-1 top-1/2 transform -translate-y-1/2 animate-spin text-gray-400" size={12} />
+                          <Loader
+                            className="absolute right-1 top-1/2 transform -translate-y-1/2 animate-spin text-gray-400"
+                            size={12}
+                          />
                         ) : (
-                          <Edit className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
+                          <Edit
+                            className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400"
+                            size={12}
+                          />
                         )}
                       </div>
-                      {getPaymentStatusBadge(order.payment_status || 'pending')}
-                      <ChevronRight 
-                        className="ml-1 text-gray-400 group-hover:text-[#e6d281] transition-colors cursor-pointer" 
+                      {getPaymentStatusBadge(order.payment_status || "pending")}
+                      <ChevronRight
+                        className="ml-1 text-gray-400 group-hover:text-[#e6d281] transition-colors cursor-pointer"
                         size={18}
                         onClick={() => setSelectedOrder(order)}
                       />
