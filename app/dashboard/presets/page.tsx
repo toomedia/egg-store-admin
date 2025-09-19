@@ -681,85 +681,7 @@ const Page = () => {
             </div>
           </div>
     
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-              <Layers className="text-[#e6d281] mr-2" size={20} />
-              Category & Filters
-            </h2>
-            
-            <div className="mb-6">
-              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <div className="relative">
-                <select 
-                  onChange={handleInputChange} 
-                  id="category" 
-                  name="category" 
-                  value={formData.category}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
-                >
-                  <option value="">Select a category</option>
-                  {categories.map((category) => (
-                    <option key={category} value={category}>{category}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-3 text-gray-400" size={16} />
-              </div>
-              <div className="mt-2">
-                <button 
-                  type="button" 
-                  className="text-sm text-[#e6d281] hover:text-[#d4c070] flex items-center"
-                >
-                  <PlusCircle className="mr-1" size={14} />
-                  Add new category
-                </button>
-              </div>
-            </div>
-      
-            <div>
-              <label htmlFor="filters" className="block text-sm font-medium text-gray-700 mb-1">
-                Filters/Tags
-              </label>
 
-              <div className="flex flex-wrap gap-2 mb-2">
-                {filters.map((filter) => (
-                  <div 
-                    key={filter} 
-                    onClick={() => handleFilterToggle(filter)}
-                    className={`flex items-center px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${formData.filters.includes(filter) ? 'bg-[#e6d281] text-gray-800' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                  >
-                    {formData.filters.includes(filter) ? (
-                      <Check className="mr-1" size={12} />
-                    ) : null}
-                    {filter}
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-3">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Add new filter/tag (press Enter)"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const value = e.currentTarget.value.trim();
-                        if (value && !formData.filters.includes(value)) {
-                          setFormData((prev) => ({
-                            ...prev,
-                            filters: [...prev.filters, value],
-                          }));
-                        }
-                        e.currentTarget.value = '';
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
-                  />
-                  <PlusCircle className="absolute right-3 top-2.5 text-gray-400" size={16} />
-                </div>
-              </div>
-            </div>
-          </div>
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
               <DollarSign className="text-[#e6d281] mr-2" size={20} />
@@ -1059,17 +981,13 @@ const Page = () => {
                             {deletingId === item.id ? 'Deleting...' : 'Delete'}
                           </button>
                         </div>
-                        <div className="flex flex-col md:items-end gap-2 mt-2 md:mt-0">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-[#e6d281] text-gray-800">
-                            {item.category || 'Uncategorized'}
-                          </span>
+
                           <div className="bg-gray-100 px-3 py-2 rounded-lg text-center">
                             <p className="text-xs text-gray-500 flex items-center justify-center">
                               <Layers className="mr-1" size={12} />
                               {item.preset_size_json?.value || 'N/A'} cards
                             </p>
                           </div>
-                        </div>
                       </div>
                     </div>
     
@@ -1091,20 +1009,6 @@ const Page = () => {
                         <p className="text-gray-700 text-sm">
                           {item.preset_desc?.de_desc || 'Keine Beschreibung'}
                         </p>
-                      </div>
-                    </div>
-    
-                    <div className="mb-4">
-                      <p className="text-xs text-gray-500 mb-1 flex items-center">
-                        <Tag className="mr-1" size={14} />
-                        Filters/Tags
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {item.filters?.map((filter: string, index: number) => (
-                          <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#e6d281] text-gray-800">
-                            {filter}
-                          </span>
-                        ))}
                       </div>
                     </div>
     
