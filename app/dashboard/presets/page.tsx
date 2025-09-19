@@ -246,8 +246,10 @@ const Page = () => {
       return;
     }
 
-    if (activeImages.length !== parseInt(String(formData.size.value))) {
-      alert(`Please ensure you have exactly ${formData.size.value} images. Currently you have ${activeImages.length} active images.`);
+    // For matching pairs game, we only need half the number of unique images
+    const requiredUniqueImages = Math.ceil(parseInt(String(formData.size.value)) / 2);
+    if (activeImages.length !== requiredUniqueImages) {
+      alert(`For a matching pairs game, you need exactly ${requiredUniqueImages} unique images (which will be duplicated to create ${formData.size.value} cards). Currently you have ${activeImages.length} images.`);
       setIsLoading(false);
       return;
     }
@@ -282,7 +284,7 @@ const Page = () => {
         }
       }
       
-      // Upload new images
+      // Upload new images and duplicate them for matching pairs
       const uploadedImageUrls: string[] = [];
 
       for (let image of formData.images) {
@@ -320,6 +322,9 @@ const Page = () => {
           console.log("Uploaded new image:", publicUrlData.publicUrl);
         }
       }
+
+      // Duplicate images for matching pairs game
+      const duplicatedImageUrls = [...uploadedImageUrls, ...uploadedImageUrls];
   
       formData.images.forEach(img => {
         if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
@@ -358,7 +363,7 @@ const Page = () => {
                 price: parseFloat(formData.price)
               },
               preset_price: formData.price,
-              preset_images: uploadedImageUrls,
+              preset_images: duplicatedImageUrls,
             })
             .eq('id', editingId)
             .select("*");
@@ -391,7 +396,7 @@ const Page = () => {
               price: parseFloat(formData.price)
             },
             preset_price: formData.price,
-            preset_images: uploadedImageUrls,
+            preset_images: duplicatedImageUrls,
           })
           .select("*");
         
@@ -452,7 +457,11 @@ const Page = () => {
     try {
       const presetToDelete = preset.find(item => item.id === id);
       if (presetToDelete && (presetToDelete.preset_images ?? []).length > 0) {
-        const imagePaths = (presetToDelete.preset_images ?? []).map(url => {
+        // Get unique image paths (since we store duplicates, we only need to delete each unique image once)
+        const allImages = presetToDelete.preset_images ?? [];
+        const uniqueImages = allImages.slice(0, Math.ceil(allImages.length / 2));
+        
+        const imagePaths = uniqueImages.map(url => {
           const urlParts = url.split('/');
           return `presets/${urlParts[urlParts.length - 1]}`;
         });
@@ -495,7 +504,11 @@ const Page = () => {
   const handleEdit = (id: string) => {
     const presetToEdit = preset.find(item => item.id === id);
     if (presetToEdit) {
-      const existingImages = (presetToEdit.preset_images || []).map((imageUrl: string, index: number) => ({
+      // For editing, we only show the unique images (first half of the stored images)
+      const allImages = presetToEdit.preset_images || [];
+      const uniqueImages = allImages.slice(0, Math.ceil(allImages.length / 2));
+      
+      const existingImages = uniqueImages.map((imageUrl: string, index: number) => ({
         fileObject: null, 
         previewUrl: imageUrl,
         isExisting: true, 
@@ -525,12 +538,12 @@ const Page = () => {
     
     // Check if removing this image would make the count less than required
     const currentImageCount = formData.images.filter(img => !img.markedForDeletion).length;
-    const requiredImageCount = parseInt(String(formData.size.value));
+    const requiredImageCount = Math.ceil(parseInt(String(formData.size.value)) / 2);
     
     // If it's an existing image and we're not already at the minimum
     if (imageToRemove.isExisting && currentImageCount <= requiredImageCount) {
       // Show confirmation dialog
-      if (!confirm("Removing this image would make your preset incomplete. You need to add a replacement image to maintain the required preset size. Are you sure you want to remove it?")) {
+      if (!confirm(`Removing this image would make your preset incomplete. You need ${requiredImageCount} unique images (which will be duplicated to create ${formData.size.value} cards). Are you sure you want to remove it?`)) {
         return; // User canceled the removal
       }
     }
@@ -864,7 +877,7 @@ const Page = () => {
                 <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
                 {formData.size.value && (
                   <p className="text-xs text-[#e6d281] mt-2">
-                    Selected size requires {formData.size.value} images
+                    Selected size requires {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images (will be duplicated to create {formData.size.value} cards)
                   </p>
                 )}
                 {editingId && (
@@ -879,7 +892,7 @@ const Page = () => {
               <div className="mt-6">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
                   <ImageIcon className="mr-2" size={16} />
-                  Selected Images ({formData.images.filter(img => !img.markedForDeletion).length}/{formData.size.value || '0'})
+                  Selected Images ({formData.images.filter(img => !img.markedForDeletion).length}/{Math.ceil(parseInt(String(formData.size.value || '0')) / 2)} unique)
                   {editingId && (
                     <span className="ml-2 text-xs text-blue-600">
                       (Existing: {formData.images.filter(img => img.isExisting && !img.markedForDeletion).length}, 
@@ -889,9 +902,9 @@ const Page = () => {
                   )}
                 </h3>
                 
-                {formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== parseInt(String(formData.size.value)) && (
-                  <p className="text-xs text-red-500 mt-2 mb-3">
-                    ⚠️ Warning: You need exactly {formData.size.value} images for this preset size. 
+                {formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2) && (
+                  <p className="text-sm text-red-500 mt-2 mb-3">
+                    ⚠️ Warning: You need exactly {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images for this preset size (which will be duplicated to create {formData.size.value} cards). 
                     Currently you have {formData.images.filter(img => !img.markedForDeletion).length} active images.
                   </p>
                 )}
@@ -955,7 +968,7 @@ const Page = () => {
             </button>
             <button 
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || (!!formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2))}
               className="px-4 py-2 border border-transparent rounded-md text-sm font-medium bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 cursor-pointer transition-colors flex items-center justify-center disabled:opacity-50"
             >
               {isLoading ? (
@@ -966,6 +979,16 @@ const Page = () => {
               {isLoading ? (editingId ? 'Updating...' : 'Creating...') : (editingId ? 'Update Preset' : 'Create Preset')}
             </button>
           </div>
+          
+          {/* Show message when button is disabled due to image count */}
+          {formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2) && !isLoading && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-sm text-yellow-800">
+                <span className="font-medium">⚠️ Cannot submit:</span> You need exactly {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images for this preset size. 
+                Currently you have {formData.images.filter(img => !img.markedForDeletion).length} active images.
+              </p>
+            </div>
+          )}
         </form>
       </div>
     );
