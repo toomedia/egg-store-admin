@@ -323,8 +323,8 @@ const Page = () => {
         }
       }
 
-      // Duplicate images for matching pairs game
-      const duplicatedImageUrls = [...uploadedImageUrls, ...uploadedImageUrls];
+      // Store only unique images in Supabase (duplication handled in application logic)
+      const finalImageUrls = uploadedImageUrls;
   
       formData.images.forEach(img => {
         if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
@@ -363,7 +363,7 @@ const Page = () => {
                 price: parseFloat(formData.price)
               },
               preset_price: formData.price,
-              preset_images: duplicatedImageUrls,
+              preset_images: finalImageUrls,
             })
             .eq('id', editingId)
             .select("*");
@@ -396,7 +396,7 @@ const Page = () => {
               price: parseFloat(formData.price)
             },
             preset_price: formData.price,
-            preset_images: duplicatedImageUrls,
+            preset_images: finalImageUrls,
           })
           .select("*");
         
@@ -457,11 +457,8 @@ const Page = () => {
     try {
       const presetToDelete = preset.find(item => item.id === id);
       if (presetToDelete && (presetToDelete.preset_images ?? []).length > 0) {
-        // Get unique image paths (since we store duplicates, we only need to delete each unique image once)
-        const allImages = presetToDelete.preset_images ?? [];
-        const uniqueImages = allImages.slice(0, Math.ceil(allImages.length / 2));
-        
-        const imagePaths = uniqueImages.map(url => {
+        // Since we now store only unique images, we can delete all stored images directly
+        const imagePaths = (presetToDelete.preset_images ?? []).map(url => {
           const urlParts = url.split('/');
           return `presets/${urlParts[urlParts.length - 1]}`;
         });
@@ -504,11 +501,8 @@ const Page = () => {
   const handleEdit = (id: string) => {
     const presetToEdit = preset.find(item => item.id === id);
     if (presetToEdit) {
-      // For editing, we only show the unique images (first half of the stored images)
-      const allImages = presetToEdit.preset_images || [];
-      const uniqueImages = allImages.slice(0, Math.ceil(allImages.length / 2));
-      
-      const existingImages = uniqueImages.map((imageUrl: string, index: number) => ({
+      // Since we now store only unique images, we can use all stored images directly
+      const existingImages = (presetToEdit.preset_images || []).map((imageUrl: string, index: number) => ({
         fileObject: null, 
         previewUrl: imageUrl,
         isExisting: true, 
