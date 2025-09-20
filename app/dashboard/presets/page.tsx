@@ -40,13 +40,10 @@ interface PresetImage {
   markedForDeletion?: boolean;
 }
 
-
 interface Preset {
   id: string;
   preset_name: PresetName;
   preset_desc: PresetDesc;
-  category: string;
-  filters: string[];
   preset_size_json: PresetSize;
   preset_price: string;
   preset_images: string[];
@@ -58,8 +55,6 @@ interface FormData {
   titleDe: string;
   descEn: string;
   descDe: string;
-  category: string;
-  filters: string[];
   size: PresetSize;
   price: string;
   images: PresetImage[];
@@ -125,7 +120,6 @@ const Page = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<string>('');
-  const categories = ['Nature', 'Abstract', 'Easter', 'Animals', 'Holiday'];
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -133,8 +127,6 @@ const Page = () => {
     titleDe: '', 
     descEn: '', 
     descDe: '', 
-    category: '', 
-    filters: [], 
     size: { value: '', price: 0 }, 
     price: '', 
     images: [] 
@@ -145,8 +137,6 @@ const Page = () => {
     { value: 48, price: 29.90 },
     { value: 72, price: 34.90 },
   ];
-  
-  const filters = ['Floral', 'Geometric', 'Minimalist', 'Colorful', 'Vintage'];
 
   useEffect(() => {
     const fetchAllPresets = async () => {
@@ -222,15 +212,6 @@ const Page = () => {
       ...prev,
       [name]: value
     }));
-  };
-
-  const handleFilterToggle = (filter: string) => {
-    setFormData(prev => {
-      const filters = prev.filters.includes(filter)
-        ? prev.filters.filter(f => f !== filter)
-        : [...prev.filters, filter];
-      return { ...prev, filters };
-    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -356,8 +337,6 @@ const Page = () => {
                 en_desc: formData.descEn,
                 de_desc: formData.descDe,
               },
-              category: formData.category,
-              filters: formData.filters,
               preset_size_json: {
                 ...formData.size,
                 price: parseFloat(formData.price)
@@ -389,8 +368,6 @@ const Page = () => {
               en_desc: formData.descEn,
               de_desc: formData.descDe,
             },
-            category: formData.category,
-            filters: formData.filters,
             preset_size_json: {
               ...formData.size,
               price: parseFloat(formData.price)
@@ -515,8 +492,6 @@ const Page = () => {
         titleDe: presetToEdit.preset_name?.de_name || '',
         descEn: presetToEdit.preset_desc?.en_desc || '',
         descDe: presetToEdit.preset_desc?.de_desc || '',
-        category: presetToEdit.category || '',
-        filters: presetToEdit.filters || [],
         size: presetToEdit.preset_size_json || { value: '', price: 0 },
         price: presetToEdit.preset_price || '',
         images: existingImages
@@ -576,8 +551,6 @@ const Page = () => {
               titleDe: '', 
               descEn: '', 
               descDe: '', 
-              category: '', 
-              filters: [], 
               size: { value: '', price: 0 }, 
               price: '', 
               images: [] 
@@ -871,8 +844,6 @@ const Page = () => {
                   titleDe: '', 
                   descEn: '', 
                   descDe: '', 
-                  category: '', 
-                  filters: [], 
                   size: { value: '', price: 0 }, 
                   price: '', 
                   images: [] 
@@ -959,6 +930,7 @@ const Page = () => {
                           </h2>
                         </div>
                       </div>
+      
                       <div className="flex flex-col items-start md:items-end gap-3 w-full md:w-auto">
                         <div className="flex gap-2">
                           <button 
