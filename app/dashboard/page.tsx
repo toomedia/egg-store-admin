@@ -384,7 +384,7 @@ const processUserGrowthData = (usersData: any[]) => {
         id: preset.id,
         title: preset.preset_name?.en_name || "Untitled Preset",
         description: preset.preset_description?.en_description || "No description available",
-        category: preset.category || "Uncategorized",
+        // category: preset.category || "Uncategorized",
         image: preset.preset_images?.[0] || "/placeholder-image.jpg",
         price: preset.preset_price || 0,
         salesCount: salesCount,
@@ -509,7 +509,9 @@ const processUserGrowthData = (usersData: any[]) => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 pt-0">
             <MetricCard
               title="Conversion Rate"
-              value={`${metrics.conversionRate}%`}
+              value={`${metrics.conversionRate}%`
+                
+              }
               description="Orders per customer"
               trend={metrics.conversionRate > 0 ? "up" : "down"}
               trendValue={metrics.conversionRate > 0 ? "12%" : "0%"}
@@ -649,22 +651,24 @@ const processUserGrowthData = (usersData: any[]) => {
               outerRadius={90}
               paddingAngle={2}
               dataKey="value"
-              label={({ name, percent }) => `${name}: ${((percent as number) * 100).toFixed(0)}%`}
+              label={({ name, percent, value }) => 
+                (value as number) > 0 ? `${name}: ${((percent as number) * 100).toFixed(0)}%` : ''
+              }
               labelLine={false}
             >
               {orderStatusData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={entry.color} />
               ))}
             </Pie>
-        <Tooltip 
-  formatter={(value) => [`${value} orders`, '']}
-  contentStyle={{ 
-    backgroundColor: '#f9fafb', 
-    border: '1px solid #e5e7eb', 
-    borderRadius: '0.5rem',
-    color: '#374151'
-  }}
-/>
+            <Tooltip 
+              formatter={(value) => [`${value} orders`, '']}
+              contentStyle={{ 
+                backgroundColor: '#f9fafb', 
+                border: '1px solid #e5e7eb', 
+                borderRadius: '0.5rem',
+                color: '#374151'
+              }}
+            />
           </PieChart>
         </ResponsiveContainer>
       </div>
@@ -704,7 +708,7 @@ const processUserGrowthData = (usersData: any[]) => {
                       key={preset.id}
                       title={preset.title}
                       description={preset.description}
-                      category={preset.category}
+                      // category={preset.category}
                       image={preset.image}
                       price={preset.price}
                       salesCount={preset.salesCount}
