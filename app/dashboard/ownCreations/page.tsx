@@ -15,6 +15,7 @@ import {
   Tag,
   Loader2
 } from "lucide-react";
+import { supabase } from '../../../utils/supabaseClient';
 
 interface Creation {
   id: string;
@@ -44,121 +45,101 @@ const OwnCreations = () => {
   const [allTags, setAllTags] = useState<string[]>([]);
   const [imageLoadingStates, setImageLoadingStates] = useState<Record<string, boolean>>({});
   
-  const itemsPerPage = 12;
+  const itemsPerPage = 20;
 
-  const fetchGeneratedImagesFromIndexedDB = async (limit = 100) => {
+  const fetchGeneratedImagesFromSupabase = async (limit = 100) => {
     try {
-      const request = indexedDB.open('egg-store-db');
-      
-      return new Promise<Creation[]>((resolve) => {
-        request.onsuccess = function (event) {
-          const db = (event.target as IDBOpenDBRequest).result;
-          
-          if (!db.objectStoreNames.contains('users')) {
-            resolve([]);
-            return;
-          }
-          
-          const transaction = db.transaction(['users'], 'readonly');
-          const store = transaction.objectStore('users');
-          const getRequest = store.get('allUsers');
+      const { data, error } = await supabase
+        .from('users')
+        .select('*');
 
-          getRequest.onsuccess = function () {
-            const result = getRequest.result;
-            const allUsers = result?.value || result;
+      if (error) {
+        console.error('Error fetching users:', error);
+        return [];
+      }
 
-            if (Array.isArray(allUsers)) {
-              const collectedCreations: Creation[] = [];
-              let count = 0;
+      if (!data || !Array.isArray(data)) {
+        return [];
+      }
 
-              for (const user of allUsers) {
+      const collectedCreations: Creation[] = [];
+      let count = 0;
+
+      for (const user of data) {
+        if (count >= limit) break;
+        
+        if (user.generated_images) {
+          try {
+            let generatedImages = user.generated_images;
+            
+            if (typeof generatedImages === 'string') {
+              generatedImages = JSON.parse(generatedImages);
+            }
+            
+            if (Array.isArray(generatedImages)) {
+              for (const img of generatedImages) {
                 if (count >= limit) break;
                 
-                if (user.generated_images) {
-                  try {
-                    let generatedImages = user.generated_images;
-                    
-                    if (typeof generatedImages === 'string') {
-                      generatedImages = JSON.parse(generatedImages);
-                    }
-                    
-                    if (Array.isArray(generatedImages)) {
-                      for (const img of generatedImages) {
-                        if (count >= limit) break;
-                        
-                        let imageUrl = '';
-                        if (typeof img === 'object' && img.url) {
-                          imageUrl = img.url;
-                        } else if (typeof img === 'string') {
-                          imageUrl = img;
-                        }
-                        
-                        if (imageUrl) {
-                          const title = img.prompt || `Creation ${count + 1}`;
-                          const createdAt = img.timestamp || new Date().toISOString();
-                          
-                          collectedCreations.push({
-                            id: `${user.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                            title: title,
-                            generated_images: imageUrl,
-                            creator_id: user.id || 'unknown',
-                            creator: {
-                              id: user.id || 'unknown',
-                              name: user.name || user.email || 'Unknown Creator',
-                              avatar_url: user.avatar_url || null
-                            },
-                            tags: [],
-                            likes: 0,
-                            downloads: 0,
-                            created_at: createdAt,
-                            updated_at: createdAt
-                          });
-                          
-                          count++;
-                        }
-                      }
-                    }
-                  } catch (error) {
-                    if (typeof user.generated_images === 'string') {
-                      collectedCreations.push({
-                        id: `${user.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                        title: `Creation ${count + 1}`,
-                        generated_images: user.generated_images,
-                        creator_id: user.id || 'unknown',
-                        creator: {
-                          id: user.id || 'unknown',
-                          name: user.name || user.email || 'Unknown Creator',
-                          avatar_url: user.avatar_url || null
-                        },
-                        tags: [],
-                        likes: 0,
-                        downloads: 0,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                      });
-                      
-                      count++;
-                    }
-                  }
+                let imageUrl = '';
+                if (typeof img === 'object' && img.url) {
+                  imageUrl = img.url;
+                } else if (typeof img === 'string') {
+                  imageUrl = img;
+                }
+                
+                if (imageUrl) {
+                  const title = img.prompt || `Creation ${count + 1}`;
+                  const createdAt = img.timestamp || new Date().toISOString();
+                  
+                  collectedCreations.push({
+                    id: `${user.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    title: title,
+                    generated_images: imageUrl,
+                    creator_id: user.id || 'unknown',
+                    creator: {
+                      id: user.id || 'unknown',
+                      name: user.name || user.email || 'Unknown Creator',
+                      avatar_url: user.avatar_url || null
+                    },
+                    tags: [],
+                    likes: 0,
+                    downloads: 0,
+                    created_at: createdAt,
+                    updated_at: createdAt
+                  });
+                  
+                  count++;
                 }
               }
-
-              resolve(collectedCreations);
-            } else {
-              resolve([]);
             }
-          };
+          } catch (error) {
+            if (typeof user.generated_images === 'string') {
+              collectedCreations.push({
+                id: `${user.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                title: `Creation ${count + 1}`,
+                generated_images: user.generated_images,
+                creator_id: user.id || 'unknown',
+                creator: {
+                  id: user.id || 'unknown',
+                  name: user.name || user.email || 'Unknown Creator',
+                  avatar_url: user.avatar_url || null
+                },
+                tags: [],
+                likes: 0,
+                downloads: 0,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              });
+              
+              count++;
+            }
+          }
+        }
+      }
 
-          getRequest.onerror = function () {
-            resolve([]);
-          };
-        };
-
-        request.onerror = function () {
-          resolve([]);
-        };
-      });
+      return collectedCreations;
     } catch (error) {
+      console.error('Error in fetchGeneratedImagesFromSupabase:', error);
       return [];
     }
   };
@@ -168,7 +149,7 @@ const OwnCreations = () => {
       try {
         setLoading(true);
         
-        const allCreations = await fetchGeneratedImagesFromIndexedDB(100);
+        const allCreations = await fetchGeneratedImagesFromSupabase(100);
         
         const tagsSet = new Set<string>();
         allCreations.forEach(creation => {
@@ -194,7 +175,7 @@ const OwnCreations = () => {
     setLoading(true);
     
     try {
-      const allCreations = await fetchGeneratedImagesFromIndexedDB(100);
+      const allCreations = await fetchGeneratedImagesFromSupabase(100);
       
       const tagsSet = new Set<string>();
       allCreations.forEach(creation => {
@@ -215,20 +196,22 @@ const OwnCreations = () => {
   };
 
   const filteredCreations = useMemo(() => {
-    return creations.filter(creation => {
-      const title = creation.title || '';
-      const tags = Array.isArray(creation.tags) ? creation.tags : [];
-      
-      const matchesSearch = 
-        title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      const matchesTag = 
-        tagFilter === 'all' || 
-        tags.includes(tagFilter);
+    return creations
+      .filter(creation => {
+        const title = creation.title || '';
+        const tags = Array.isArray(creation.tags) ? creation.tags : [];
+        
+        const matchesSearch = 
+          title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+        
+        const matchesTag = 
+          tagFilter === 'all' || 
+          tags.includes(tagFilter);
 
-      return matchesSearch && matchesTag;
-    });
+        return matchesSearch && matchesTag;
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [creations, searchQuery, tagFilter]);
   
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -259,7 +242,7 @@ const OwnCreations = () => {
       if (!creation) return;
       
       setCreations(prev => prev.map(c => 
-        c.id === creationId ? { ...c, downloads: c.downloads + 1 } : c
+        c.id === creationId ? { ...c, downloads: (c.downloads || 0) + 1 } : c
       ));
       
       fetch(creation.generated_images)
@@ -287,7 +270,7 @@ const OwnCreations = () => {
     try {
       showNotification('info', `Starting download of ${creations.length} images...`);
       
-      setCreations(prev => prev.map(c => ({ ...c, downloads: c.downloads + 1 })));
+      setCreations(prev => prev.map(c => ({ ...c, downloads: (c.downloads || 0) + 1 })));
       
       for (let i = 0; i < creations.length; i++) {
         const creation = creations[i];
@@ -448,7 +431,7 @@ const OwnCreations = () => {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 mb-6">
             {currentItems.map((creation) => (
               <div 
                 key={creation.id} 
@@ -472,39 +455,23 @@ const OwnCreations = () => {
                     }}
                     loading="lazy"
                   />
-                  <div className="absolute top-2 right-2">
+                  <div className="absolute top-1 right-1">
                     <button 
-                      className="p-1.5 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
+                      className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
                       onClick={() => handleDownload(creation.id)}
                     >
-                      <Download size={16} />
+                      <Download size={12} />
                     </button>
                   </div>
                 </div>
                 
-                <div className="p-4">
-                  <div className="flex items-center justify-between text-sm text-gray-500 mb-3">
-                    <div className="flex items-center">
-                    </div>
+                <div className="p-2">
+                  <div className="text-xs text-gray-500 truncate" title={creation.title}>
+                    {creation.title}
                   </div>
-                  
-                  {creation.tags && creation.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-4">
-                      {creation.tags.slice(0, 3).map((tag, index) => (
-                        <span 
-                          key={index} 
-                          className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {creation.tags.length > 3 && (
-                        <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                          +{creation.tags.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  <div className="text-xs text-gray-400 mt-1">
+                    {formatDate(creation.created_at)}
+                  </div>
                 </div>
               </div>
             ))}
