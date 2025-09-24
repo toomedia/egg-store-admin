@@ -48,94 +48,87 @@ const OwnCreations = () => {
   const itemsPerPage = 20;
 
   const fetchGeneratedImagesFromSupabase = async (limit = 100) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*');
-
-      if (error) {
-        console.error('Error fetching users:', error);
-        return [];
-      }
-
-      if (!data || !Array.isArray(data)) {
-        return [];
-      }
-
-      const collectedCreations: Creation[] = [];
-      let count = 0;
-
-      for (const user of data) {
-        if (count >= limit) break;
+      try {
+        const { data, error } = await supabase
+        .from('user_own_creations')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
         
-        if (user.generated_images) {
-          try {
-            let generatedImages = user.generated_images;
+        console.log("🚀 ~ fetchGeneratedImagesFromSupabase ~ data:", data)
+
+        if (error) {
+          console.error('Error fetching user_own_creations:', error);
+          return [];
+        }
+
+        if (!data || !Array.isArray(data)) {
+          return [];
+        }
+
+        const collectedCreations: Creation[] = [];
+
+        for (const creation of data) {
+          if (creation.image_url) {
+            const isGuest = !creation.user_uid || creation.user_uid === null;
             
-            if (typeof generatedImages === 'string') {
-              generatedImages = JSON.parse(generatedImages);
-            }
-            
-            if (Array.isArray(generatedImages)) {
-              for (const img of generatedImages) {
-                if (count >= limit) break;
-                
-                let imageUrl = '';
-                if (typeof img === 'object' && img.url) {
-                  imageUrl = img.url;
-                } else if (typeof img === 'string') {
-                  imageUrl = img;
-                }
-                
-                if (imageUrl) {
-                  const title = img.prompt || `Creation ${count + 1}`;
-                  const createdAt = img.timestamp || new Date().toISOString();
-                  
-                  collectedCreations.push({
-                    id: `${user.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                    title: title,
-                    generated_images: imageUrl,
-                    creator_id: user.id || 'unknown',
-                    creator: {
-                      id: user.id || 'unknown',
-                      name: user.name || user.email || 'Unknown Creator',
-                      avatar_url: user.avatar_url || null
-                    },
-                    tags: [],
-                    likes: 0,
-                    downloads: 0,
-                    created_at: createdAt,
-                    updated_at: createdAt
-                  });
-                  
-                  count++;
-                }
-              }
-            }
-          } catch (error) {
-            if (typeof user.generated_images === 'string') {
-              collectedCreations.push({
-                id: `${user.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                title: `Creation ${count + 1}`,
-                generated_images: user.generated_images,
-                creator_id: user.id || 'unknown',
-                creator: {
-                  id: user.id || 'unknown',
-                  name: user.name || user.email || 'Unknown Creator',
-                  avatar_url: user.avatar_url || null
-                },
-                tags: [],
-                likes: 0,
-                downloads: 0,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              });
+            try {
+              let imageUrls: string[] = [];
               
-              count++;
+              // Parse JSON string if it's a string
+              if (typeof creation.image_url === 'string') {
+                imageUrls = JSON.parse(creation.image_url);
+              } else if (Array.isArray(creation.image_url)) {
+                imageUrls = creation.image_url;
+              }
+              
+              // Process each image URL in the array
+              if (Array.isArray(imageUrls)) {
+                imageUrls.forEach((imageUrl: string, index: number) => {
+                  if (imageUrl && typeof imageUrl === 'string') {
+                    collectedCreations.push({
+                      id: `${creation.id}-${index}`,
+                      title: `Creation ${creation.id.slice(0, 8)}-${index + 1}`,
+                      generated_images: imageUrl,
+                      creator_id: creation.user_uid || 'guest',
+                      creator: {
+                        id: creation.user_uid || 'guest',
+                        name: isGuest ? 'Guest User' : 'Registered User',
+                        avatar_url: null
+                      },
+                      tags: [],
+                      likes: 0,
+                      downloads: 0,
+                      created_at: creation.created_at,
+                      updated_at: creation.created_at
+                    });
+                  }
+                });
+              }
+            } catch (error) {
+              console.error('Error parsing image_url JSON:', error, 'for creation:', creation.id);
+              // Fallback: treat as single string if JSON parsing fails
+              if (typeof creation.image_url === 'string') {
+                collectedCreations.push({
+                  id: creation.id,
+                  title: `Creation ${creation.id.slice(0, 8)}`,
+                  generated_images: creation.image_url,
+                  creator_id: creation.user_uid || 'guest',
+                  creator: {
+                    id: creation.user_uid || 'guest',
+                    name: isGuest ? 'Guest User' : 'Registered User',
+                    avatar_url: null
+                  },
+                  tags: [],
+                  likes: 0,
+                  downloads: 0,
+                  created_at: creation.created_at,
+                  updated_at: creation.created_at
+                });
+              }
             }
           }
         }
-      }
 
       return collectedCreations;
     } catch (error) {
