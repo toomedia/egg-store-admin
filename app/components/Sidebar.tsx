@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import Link from "next/link";
 import {
   Egg,
@@ -17,10 +17,11 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
@@ -30,8 +31,6 @@ export default function Sidebar() {
     { href: "/dashboard/presets", label: "Presets", icon: <Box className="h-5 w-5" /> },
     { href: "/dashboard/ownCreations", label: "Own Creations", icon: <Sparkles className="h-5 w-5" /> },
     { href: "/dashboard/adminManage", label: "Admin Manager", icon: <Shield className="h-5 w-5" /> },
-    { href: "/dashboard/reports", label: "Reports", icon: <FileText className="h-5 w-5" /> },
-    { href: "/dashboard/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> },
   ];
 
   const isActive = (href: string) => {
@@ -40,6 +39,47 @@ export default function Sidebar() {
       (href !== "/dashboard" && pathname.startsWith(href)) ||
       (pathname === "/dashboard" && href === "/dashboard")
     );
+  };
+
+  const handleLogout = useCallback(async () => {
+    try {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      sessionStorage.removeItem('auth');
+      
+      // Clear cookies
+      document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      document.cookie = 'session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      
+   
+      setMobileMenuOpen(false);
+      
+      // Use setTimeout to defer navigation
+      setTimeout(() => {
+        router.push('/auth');
+      }, 0);
+      
+    } catch (error) {
+      console.error('Logout failed:', error);
+      alert('Logout failed. Please try again.');
+    }
+  }, [router]);
+
+  // Alternative: Hard redirect without router
+  const handleLogoutAlternative = () => {
+    // Clear all storage
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Clear cookies
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, "")
+        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+    
+    // Hard redirect - most reliable
+    window.location.href = '/auth';
   };
 
   return (
@@ -64,7 +104,6 @@ export default function Sidebar() {
         <div className="flex flex-col flex-grow overflow-y-auto">
           {/* Logo Section */}
           <div className="p-6 border-b border-gray-200">
-            
             <Link
               href="/"
               className="flex items-center space-x-3 hover:opacity-90 transition-opacity"
@@ -103,11 +142,9 @@ export default function Sidebar() {
             ))}
           </nav>
         </div>
-
-        {/* Logout Button */}
         <div className="p-4 border-t border-gray-200">
           <button
-            onClick={() => alert("Logout clicked")}
+            onClick={handleLogoutAlternative} 
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md text-base font-medium text-red-600 hover:bg-red-50 transition-colors font-manrope"
           >
             <LogOut className="h-5 w-5" />
