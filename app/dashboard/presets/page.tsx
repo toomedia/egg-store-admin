@@ -133,9 +133,7 @@ const Page = () => {
   });
 
   const sizes = [
-    { value: 24, price: 24.90 },
-    { value: 48, price: 29.90 },
-    { value: 72, price: 34.90 },
+    { value: 24, price: 0.99 },
   ];
 
   useEffect(() => {
@@ -337,10 +335,7 @@ const Page = () => {
                 en_desc: formData.descEn,
                 de_desc: formData.descDe,
               },
-              preset_size_json: {
-                ...formData.size,
-                price: parseFloat(formData.price)
-              },
+              preset_size_json: formData.size,
               preset_price: formData.price,
               preset_images: finalImageUrls,
             })
@@ -368,10 +363,7 @@ const Page = () => {
               en_desc: formData.descEn,
               de_desc: formData.descDe,
             },
-            preset_size_json: {
-              ...formData.size,
-              price: parseFloat(formData.price)
-            },
+            preset_size_json: formData.size,
             preset_price: formData.price,
             preset_images: finalImageUrls,
           })
@@ -626,9 +618,8 @@ const Page = () => {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="desc-en" className="block text-sm font-medium text-gray-700 mb-1">Description (English)</label>
+                <label htmlFor="desc-en" className="block text-sm font-medium text-gray-700 mb-1">Description (English) - Optional</label>
                 <textarea 
-                  required 
                   onChange={handleInputChange} 
                   id="desc-en" 
                   name="descEn" 
@@ -639,9 +630,8 @@ const Page = () => {
                 ></textarea>
               </div>
               <div>
-                <label htmlFor="desc-de" className="block text-sm font-medium text-gray-700 mb-1">Description (German)</label>
+                <label htmlFor="desc-de" className="block text-sm font-medium text-gray-700 mb-1">Description (German) - Optional</label>
                 <textarea 
-                  required 
                   onChange={handleInputChange} 
                   id="desc-de" 
                   name="descDe" 
