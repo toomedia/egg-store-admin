@@ -43,48 +43,42 @@ const OwnCreations = () => {
   const [creations, setCreations] = useState<Creation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
   const [tagFilter, setTagFilter] = useState('all');
   const [notification, setNotification] = useState<{type: string, message: string} | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [imageLoadingStates, setImageLoadingStates] = useState<Record<string, boolean>>({});
-  const [showPrompt, setShowPrompt] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<Creation | null>(null);
   const [sourceFilter, setSourceFilter] = useState<'all' | 'image_url' | 'generated_images'>('all');
+  const [displayedCount, setDisplayedCount] = useState(100); // Initial display count
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   
-  const itemsPerPage = 20;
+  const itemsPerBatch = 100; // Images to display per batch (5 rows × 20 images)
 
-  const fetchGeneratedImagesFromSupabase = async (limit = 100) => {
+  const fetchGeneratedImagesFromSupabase = async (offset = 0, batchSize = 50): Promise<{ creations: Creation[], hasMore: boolean }> => {
     try {
       const { data, error } = await supabase
         .from('user_own_creations')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(limit);
+        .range(offset, offset + batchSize - 1);
       
-      console.log("🚀 ~ fetchGeneratedImagesFromSupabase ~ data:", data);
-
       if (error) {
         console.error('Error fetching user_own_creations:', error);
-        return [];
+        return { creations: [], hasMore: false };
       }
 
       if (!data || !Array.isArray(data)) {
-        return [];
+        return { creations: [], hasMore: false };
       }
 
-      const collectedCreations: Creation[] = [];
+              const collectedCreations: Creation[] = [];
+      const seenImageUrls = new Set<string>(); // Track seen image URLs to prevent duplicates
 
       for (const creation of data) {
         const isGuest = !creation.user_uid || creation.user_uid === null;
         const creationId = creation.id;
-        
-        console.log(`Processing creation ${creationId}:`, {
-          has_image_url: !!creation.image_url,
-          has_generated_images: !!creation.generated_images,
-          image_url_type: typeof creation.image_url,
-          generated_images_type: typeof creation.generated_images
-        });
 
         if (creation.image_url) {
           try {
@@ -107,18 +101,17 @@ const OwnCreations = () => {
               imageUrls = creation.image_url.filter((url: string) => typeof url === 'string' && url.length > 0);
             }
 
-            console.log(`Found ${imageUrls.length} images in image_url for creation ${creationId}`);
-
             imageUrls.forEach((imageUrl: string, index: number) => {
-              if (imageUrl && typeof imageUrl === 'string') {
-                collectedCreations.push({
+              if (imageUrl && typeof imageUrl === 'string' && !seenImageUrls.has(imageUrl)) {
+                seenImageUrls.add(imageUrl);
+                          collectedCreations.push({
                   id: `${creationId}-image_url-${index}`,
-                  title: `Image ${creationId.slice(0, 8)}-${index + 1}`,
+                  title: '',
                   image_url: imageUrl,
                   prompt: '', 
                   source: 'image_url',
                   creator_id: creation.user_uid || 'guest',
-                  creator: {
+                            creator: {
                     id: creation.user_uid || 'guest',
                     name: isGuest ? 'Guest User' : 'Registered User',
                     avatar_url: null
@@ -164,20 +157,20 @@ const OwnCreations = () => {
                 generatedImagesData = creation.generated_images.generated_images;
               } else if (Array.isArray(creation.generated_images)) {
                 generatedImagesData = creation.generated_images;
-              } else {
+            } else {
                 generatedImagesData = [creation.generated_images];
               }
             }
 
-            console.log(`Found ${generatedImagesData.length} images in generated_images for creation ${creationId}`);
             generatedImagesData.forEach((imgData: any, index: number) => {
               const imageUrl = imgData.url || imgData.image_url;
-              const prompt = imgData.prompt || `Generated image ${index + 1}`;
+              const prompt = imgData.prompt || '';
               
-              if (imageUrl && typeof imageUrl === 'string') {
+              if (imageUrl && typeof imageUrl === 'string' && !seenImageUrls.has(imageUrl)) {
+                seenImageUrls.add(imageUrl);
                 collectedCreations.push({
                   id: `${creationId}-generated_images-${index}`,
-                  title: `Design ${creationId.slice(0, 8)}-${index + 1}`,
+                  title: '',
                   image_url: imageUrl,
                   prompt: prompt,
                   source: 'generated_images',
@@ -201,61 +194,143 @@ const OwnCreations = () => {
         }
       }
 
-      console.log(`Total creations collected: ${collectedCreations.length}`);
-      return collectedCreations;
+      return { creations: collectedCreations, hasMore: data.length === batchSize };
     } catch (error) {
       console.error('Error in fetchGeneratedImagesFromSupabase:', error);
-      return [];
+      return { creations: [], hasMore: false };
+    }
+  };
+
+  const fetchMoreCreations = async () => {
+    if (loadingMore || !hasMore) return;
+    
+    setLoadingMore(true);
+    try {
+      // Calculate offset based on how many database records we've fetched
+      const dbRecordsFetched = Math.floor(creations.length / 5); // Rough estimate
+      const batchSize = 50;
+      
+      const result = await fetchGeneratedImagesFromSupabase(dbRecordsFetched, batchSize);
+      const newCreations = result.creations;
+      const moreAvailable = result.hasMore;
+      
+      if (newCreations.length > 0) {
+        const seenIds = new Set(creations.map((c: Creation) => c.id));
+        const uniqueNewCreations = newCreations.filter((c: Creation) => !seenIds.has(c.id));
+        
+        if (uniqueNewCreations.length > 0) {
+          const tagsSet = new Set<string>(allTags);
+          uniqueNewCreations.forEach((creation: Creation) => {
+            if (creation.tags && Array.isArray(creation.tags)) {
+              creation.tags.forEach((tag: string) => tagsSet.add(tag));
+            }
+          });
+          setAllTags(Array.from(tagsSet));
+          
+          setCreations(prev => [...prev, ...uniqueNewCreations]);
+          setHasMore(moreAvailable);
+        } else {
+          setHasMore(false);
+        }
+      } else {
+        setHasMore(false);
+      }
+    } catch (err) {
+      showNotification('error', 'Failed to load more creations');
+    } finally {
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    const fetchAllCreations = async () => {
+    const fetchInitialCreations = async () => {
       try {
         setLoading(true);
         
-        const allCreations = await fetchGeneratedImagesFromSupabase(100);
+        let allFetchedCreations: Creation[] = [];
+        let offset = 0;
+        const batchSize = 50;
+        let hasMoreData = true;
+        
+        // Fetch batches until we have enough processed images (at least itemsPerBatch)
+        while (hasMoreData && allFetchedCreations.length < itemsPerBatch) {
+          const result = await fetchGeneratedImagesFromSupabase(offset, batchSize);
+          const creations = result.creations;
+          const hasMore = result.hasMore;
+          
+          if (creations.length === 0) {
+            hasMoreData = false;
+            break;
+          }
+          
+          allFetchedCreations = [...allFetchedCreations, ...creations];
+          offset += batchSize;
+          
+          if (!hasMore || creations.length < batchSize) {
+            hasMoreData = false;
+          }
+        }
         
         const tagsSet = new Set<string>();
-        allCreations.forEach(creation => {
+        allFetchedCreations.forEach(creation => {
           if (creation.tags && Array.isArray(creation.tags)) {
             creation.tags.forEach((tag: string) => tagsSet.add(tag));
           }
         });
         setAllTags(Array.from(tagsSet));
         
-        setCreations(allCreations);
+        setCreations(allFetchedCreations);
+        setHasMore(hasMoreData);
         setLastSync(new Date());
         setLoading(false);
-        
-        // Log statistics
-        const imageUrlCount = allCreations.filter(c => c.source === 'image_url').length;
-        const generatedImagesCount = allCreations.filter(c => c.source === 'generated_images').length;
-        console.log(`Source statistics: image_url=${imageUrlCount}, generated_images=${generatedImagesCount}`);
       } catch (err) {
         setLoading(false);
         showNotification('error', 'Failed to fetch creations');
       }
     };
 
-    fetchAllCreations();
+    fetchInitialCreations();
   }, []);
 
   const refreshCreations = async () => {
     setLoading(true);
+    setDisplayedCount(100);
+    setHasMore(true);
     
     try {
-      const allCreations = await fetchGeneratedImagesFromSupabase(100);
+      let allFetchedCreations: Creation[] = [];
+      let offset = 0;
+      const batchSize = 50;
+      let hasMoreData = true;
+      
+      while (hasMoreData && allFetchedCreations.length < itemsPerBatch) {
+        const result = await fetchGeneratedImagesFromSupabase(offset, batchSize);
+        const creations = result.creations;
+        const hasMore = result.hasMore;
+        
+        if (creations.length === 0) {
+          hasMoreData = false;
+          break;
+        }
+        
+        allFetchedCreations = [...allFetchedCreations, ...creations];
+        offset += batchSize;
+        
+        if (!hasMore || creations.length < batchSize) {
+          hasMoreData = false;
+        }
+      }
       
       const tagsSet = new Set<string>();
-      allCreations.forEach(creation => {
+      allFetchedCreations.forEach(creation => {
         if (creation.tags && Array.isArray(creation.tags)) {
           creation.tags.forEach((tag: string) => tagsSet.add(tag));
         }
       });
       setAllTags(Array.from(tagsSet));
       
-      setCreations(allCreations);
+      setCreations(allFetchedCreations);
+      setHasMore(hasMoreData);
       setLastSync(new Date());
       setLoading(false);
       showNotification('success', 'Creations refreshed successfully');
@@ -268,18 +343,18 @@ const OwnCreations = () => {
   const filteredCreations = useMemo(() => {
     return creations
       .filter(creation => {
-        const title = creation.title || '';
+      const title = creation.title || '';
         const prompt = creation.prompt || '';
-        const tags = Array.isArray(creation.tags) ? creation.tags : [];
-        
-        const matchesSearch = 
-          title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      const tags = Array.isArray(creation.tags) ? creation.tags : [];
+      
+      const matchesSearch = 
+        title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           prompt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-        
-        const matchesTag = 
-          tagFilter === 'all' || 
-          tags.includes(tagFilter);
+        tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesTag = 
+        tagFilter === 'all' || 
+        tags.includes(tagFilter);
 
         const matchesSource = 
           sourceFilter === 'all' || 
@@ -290,19 +365,25 @@ const OwnCreations = () => {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [creations, searchQuery, tagFilter, sourceFilter]);
   
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredCreations.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredCreations.length / itemsPerPage);
+  const currentItems = filteredCreations.slice(0, displayedCount);
+  const hasMoreToShow = filteredCreations.length > displayedCount || hasMore;
+  
+  const handleLoadMore = async () => {
+    if (filteredCreations.length > displayedCount) {
+      // Show more from already loaded creations
+      setDisplayedCount(prev => Math.min(prev + itemsPerBatch, filteredCreations.length));
+    } else if (hasMore && !loadingMore) {
+      // Fetch more from database
+      await fetchMoreCreations();
+      setDisplayedCount(prev => prev + itemsPerBatch);
+    }
+  };
   
   const showNotification = (type: string, message: string) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const handlePageChange = (pageNumber: number) => {
-    setCurrentPage(pageNumber);
-  };
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString("en-US", {
@@ -382,13 +463,6 @@ const OwnCreations = () => {
     }));
   };
 
-  const handleImageStartLoading = (creationId: string) => {
-    setImageLoadingStates(prev => ({
-      ...prev,
-      [creationId]: true
-    }));
-  };
-
   const truncatePrompt = (prompt: string, maxLength: number = 50) => {
     if (prompt.length <= maxLength) return prompt;
     return prompt.substring(0, maxLength) + '...';
@@ -456,28 +530,54 @@ const OwnCreations = () => {
           </button>
         </div>
       )}
-      {showPrompt && (
-        <div className="fixed inset-0 bg-white bg-opacity-95 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 border border-gray-200 shadow-xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Prompt</h3>
-              <button 
-                onClick={() => setShowPrompt(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <XCircle size={20} />
-              </button>
-            </div>
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <p className="text-gray-800 whitespace-pre-wrap">{showPrompt}</p>
-            </div>
-            <div className="mt-4 flex justify-end">
-              <button 
-                onClick={() => setShowPrompt(null)}
-                className="px-4 py-2 bg-[#e6d281] text-gray-800 rounded-lg hover:bg-[#d4c070] transition-colors"
-              >
-                Close
-              </button>
+      {selectedImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div 
+            className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => setSelectedImage(null)}
+              className="absolute top-4 right-4 z-10 bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition-colors"
+            >
+              <XCircle size={24} />
+            </button>
+            <div className="p-6">
+              <div className="relative w-full aspect-square max-h-[70vh] mb-4 bg-gray-100 rounded-lg overflow-hidden">
+                <Image
+                  src={selectedImage.image_url}
+                  alt={selectedImage.prompt || 'Creation'}
+                  fill
+                  className="object-contain"
+                  unoptimized
+                />
+              </div>
+              {selectedImage.prompt && (
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Prompt</h3>
+                  <div className="bg-gray-100 p-4 rounded-lg">
+                    <p className="text-gray-800 whitespace-pre-wrap">{selectedImage.prompt}</p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-sm text-gray-600">
+                <div>
+                  <span className="font-medium">Created:</span> {formatDate(selectedImage.created_at)}
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownload(selectedImage.id);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg"
+                >
+                  <Download size={16} />
+                  Download
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -531,7 +631,7 @@ const OwnCreations = () => {
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
-                setCurrentPage(1);
+                setDisplayedCount(itemsPerBatch);
               }}
             />
           </div>
@@ -545,7 +645,7 @@ const OwnCreations = () => {
               value={tagFilter}
               onChange={(e) => {
                 setTagFilter(e.target.value);
-                setCurrentPage(1);
+                setDisplayedCount(itemsPerBatch);
               }}
             >
               <option value="all">All Tags</option>
@@ -565,7 +665,7 @@ const OwnCreations = () => {
               value={sourceFilter}
               onChange={(e) => {
                 setSourceFilter(e.target.value as 'all' | 'image_url' | 'generated_images');
-                setCurrentPage(1);
+                setDisplayedCount(itemsPerBatch);
               }}
             >
               <option value="all">All Sources</option>
@@ -595,22 +695,37 @@ const OwnCreations = () => {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 mb-6">
+          <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-10 lg:grid-cols-15 xl:grid-cols-20 gap-2 mb-6" style={{ gridTemplateColumns: 'repeat(20, minmax(0, 1fr))' }}>
             {currentItems.map((creation) => (
               <div 
                 key={creation.id} 
-                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow group"
+                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer col-span-1"
+                onClick={() => setSelectedImage(creation)}
               >
                 <div className="relative aspect-square">
-                  <SafeImage
-                    src={creation.image_url}
+                  {imageLoadingStates[creation.id] !== false && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                      <Loader2 className="animate-spin text-gray-400" size={24} />
+                    </div>
+                  )}
+                  <Image 
+                    src={creation.image_url} 
                     alt={creation.title}
-                    className="object-cover"
+                    fill
+                    className={`object-cover ${imageLoadingStates[creation.id] !== false ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
+                    onLoadingComplete={() => handleImageLoad(creation.id)}
+                    onError={() => {
+                      handleImageLoad(creation.id);
+                    }}
+                    unoptimized
                   />
                   <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                     <button 
                       className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
-                      onClick={() => handleDownload(creation.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownload(creation.id);
+                      }}
                       title="Download"
                     >
                       <Download size={12} />
@@ -622,7 +737,10 @@ const OwnCreations = () => {
                     <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
                         className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
-                        onClick={() => setShowPrompt(creation.prompt)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedImage(creation);
+                        }}
                         title="View Prompt"
                       >
                         <MessageSquare size={12} />
@@ -632,98 +750,40 @@ const OwnCreations = () => {
                 </div>
                 
                 <div className="p-2">
-                  <div className="text-xs text-gray-500 truncate" title={creation.title}>
-                    {creation.title}
-                  </div>
-                  
-                  {/* Show prompt only for generated_images format */}
-                  {hasValidPrompt(creation) && (
-                    <div 
-                      className="text-xs text-gray-600 mt-1 cursor-pointer hover:text-blue-600 truncate"
-                      title="Click to view full prompt"
-                      onClick={() => setShowPrompt(creation.prompt)}
-                    >
-                      {truncatePrompt(creation.prompt)}
+                  {creation.prompt ? (
+                    <div className="text-xs text-gray-600 truncate" title={creation.prompt}>
+                      {truncatePrompt(creation.prompt, 60)}
                     </div>
-                  )}
-                  
-                  <div className="text-xs text-gray-400 mt-1">
-                    {formatDate(creation.created_at)}
-                  </div>
+                  ) : null}
                 </div>
               </div>
             ))}
           </div>
           
-          {totalPages > 1 && (
-            <div className="bg-white rounded-lg shadow-md px-4 py-3 flex items-center justify-between">
-              <div className="flex-1 flex justify-between sm:hidden">
+          {hasMoreToShow && (
+            <div className="flex justify-center mt-6">
                 <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Next
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="px-6 py-3 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="animate-spin" size={18} />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    Load More
+                    <ChevronDown size={18} />
+                  </>
+                )}
                 </button>
               </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    Showing <span className="font-medium">{indexOfFirstItem + 1}</span> to{' '}
-                    <span className="font-medium">{Math.min(indexOfLastItem, filteredCreations.length)}</span> of{' '}
-                    <span className="font-medium">{filteredCreations.length}</span> creations
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                    <button
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      <span className="sr-only">Previous</span>
-                      <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-                    </button>
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = currentPage - 2 + i;
-                      }
-                      
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => handlePageChange(pageNum)}
-                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${currentPage === pageNum ? 'z-10 bg-[#e6d281] border-[#e6d281] text-gray-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                    <button
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      <span className="sr-only">Next</span>
-                      <ChevronRight className="h-5 w-5" aria-hidden="true" />
-                    </button>
-                  </nav>
-                </div>
-              </div>
+          )}
+          {!hasMoreToShow && filteredCreations.length > 0 && (
+            <div className="text-center mt-6 text-gray-500 text-sm">
+              Showing all {filteredCreations.length} creations
             </div>
           )}
         </>
