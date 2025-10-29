@@ -1,5 +1,7 @@
 "use client"
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
+import { useSearchParams } from 'next/navigation';
 import {supabase} from "../../../utils/supabaseClient"
 import {  
   ArrowLeft, 
@@ -113,9 +115,57 @@ const getItem = async (key: string): Promise<any> => {
   }
 };
 
+// Safe Image Component with optimized loading
+const SafeImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
+  const [imgSrc, setImgSrc] = useState(src);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  const handleError = () => {
+    setHasError(true);
+    setIsLoading(false);
+  };
+
+  const handleLoad = () => {
+    setIsLoading(false);
+  };
+
+  if (hasError) {
+    return (
+      <div className={`${className} bg-gray-200 flex items-center justify-center`}>
+        <ImageIcon className="text-gray-400" size={24} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${className} relative overflow-hidden`}>
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+          <Loader2 className="animate-spin text-gray-400" size={20} />
+        </div>
+      )}
+      <Image
+        src={imgSrc}
+        alt={alt}
+        fill
+        className={`object-cover ${isLoading ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
+        onError={handleError}
+        onLoad={handleLoad}
+        loading="lazy"
+        sizes="(max-width: 768px) 100px, (max-width: 1200px) 150px, 200px"
+      />
+    </div>
+  );
+};
+
 const Page = () => {
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get('q') || '';
+  
   const [currentView, setCurrentView] = useState<'list' | 'create'>('list');
   const [preset, setPreset] = useState<Preset[]>([]);
+  const [filteredPreset, setFilteredPreset] = useState<Preset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -135,6 +185,22 @@ const Page = () => {
   const sizes = [
     { value: 24, price: 0.99 },
   ];
+
+  // Filter presets based on search query
+  useEffect(() => {
+    if (!searchQuery) {
+      setFilteredPreset(preset);
+    } else {
+      const filtered = preset.filter(item => 
+        item.preset_name?.en_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.preset_name?.de_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.preset_desc?.en_desc?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.preset_desc?.de_desc?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.id.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredPreset(filtered);
+    }
+  }, [preset, searchQuery]);
 
   useEffect(() => {
     const fetchAllPresets = async () => {
@@ -879,6 +945,18 @@ const Page = () => {
           <div className='mb-4 md:mb-0'>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">Presets Management</h1>
             <p className="text-gray-600">Manage all presets (collections of egg cards). Create, edit, and organize presets.</p>
+            
+            {/* Search Status */}
+            {searchQuery && (
+              <div className="mt-2">
+                <p className="text-sm text-gray-600">
+                  Showing results for: <span className="font-semibold text-[#e6d281]">"{searchQuery}"</span>
+                  <span className="ml-2 text-xs bg-[#e6d281] bg-opacity-20 px-2 py-1 rounded-full">
+                    {filteredPreset.length} preset(s) found
+                  </span>
+                </p>
+              </div>
+            )}
           </div>
     
           <button
@@ -892,9 +970,9 @@ const Page = () => {
       </div>
  
   
-      {preset.length > 0 ? (
+      {filteredPreset.length > 0 ? (
         <div className="grid grid-cols-1 gap-6">
-          {preset.map((item) => (
+          {filteredPreset.map((item) => (
             <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
               <div className="p-6">
                 <div className="flex flex-col lg:flex-row gap-6">
@@ -1003,11 +1081,10 @@ const Page = () => {
                   <div className="flex gap-3 overflow-x-auto pb-2">
                     {item.preset_images?.map((imageUrl: string, index: number) => (
                       <div key={index} className="flex-shrink-0 h-[100px] w-[100px] overflow-hidden rounded-md border border-gray-200">
-                        <img 
-                          src={imageUrl} 
+                        <SafeImage
+                          src={imageUrl}
                           alt={`Preset image ${index + 1}`}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
+                          className="w-full h-full"
                         />
                       </div>
                     ))}
@@ -1023,8 +1100,15 @@ const Page = () => {
             <div className="mx-auto h-12 w-12 text-gray-400 mb-4">
               <ImageIcon size={48} />
             </div>
-            <h3 className="text-lg font-medium text-gray-900">No presets found!</h3>
-            <p className="mt-1 text-gray-500 mb-6">Get started by creating your first preset.</p>
+            <h3 className="text-lg font-medium text-gray-900">
+              {searchQuery ? 'No matching presets found!' : 'No presets found!'}
+            </h3>
+            <p className="mt-1 text-gray-500 mb-6">
+              {searchQuery 
+                ? `No presets found matching "${searchQuery}". Try a different search term.`
+                : 'Get started by creating your first preset.'
+              }
+            </p>
             {isLoading ? (
               <button
               onClick={() => setCurrentView('create')}
