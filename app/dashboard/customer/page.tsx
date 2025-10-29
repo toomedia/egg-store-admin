@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "../../../utils/supabaseClient";
 import {
   User,
@@ -14,11 +15,39 @@ import {
 import { getItem, setItem } from "@/utils/indexedDB";
 
 const UsersPage = () => {
+  const searchParams = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState<string>(searchParams.get('q') || '');
+  
   const [users, setUsers] = useState<any[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [lastSync, setLastSync] = useState<Date | null>(null);
+
+  // Filter users based on search query and filters
+  useEffect(() => {
+    if (!searchQuery && statusFilter === "all") {
+      setFilteredUsers(users);
+    } else {
+      const filtered = users.filter((user) => {
+        const name = user.name || "";
+        const email = user.email || "";
+
+        const matchesSearch = searchQuery
+          ? name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            email.toLowerCase().includes(searchQuery.toLowerCase())
+          : true;
+
+        const matchesStatus =
+          statusFilter === "all" ||
+          (statusFilter === "active" && user.status === "active") ||
+          (statusFilter === "inactive" && user.status === "inactive");
+
+        return matchesSearch && matchesStatus;
+      });
+      setFilteredUsers(filtered);
+    }
+  }, [users, searchQuery, statusFilter]);
 
   useEffect(() => {
     const DB_NAME = "egg-store-db";
@@ -176,22 +205,6 @@ const UsersPage = () => {
     }
   };
 
-  const filteredUsers = users.filter((user) => {
-    const name = user.name || "";
-    const email = user.email || "";
-
-    const matchesSearch =
-      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      email.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "active" && user.status === "active") ||
-      (statusFilter === "inactive" && user.status === "inactive");
-
-    return matchesSearch && matchesStatus;
-  });
-
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString("en-US", {
       year: "numeric",
@@ -220,7 +233,18 @@ const UsersPage = () => {
             <p className="text-gray-500 mt-1">
               Manage all your customers in one place
             </p>
-        
+            
+            {/* Search Status */}
+            {searchQuery && (
+              <div className="mt-2">
+                <p className="text-sm text-gray-600">
+                  Showing results for: <span className="font-semibold text-[#e6d281]">"{searchQuery}"</span>
+                  <span className="ml-2 text-xs bg-[#e6d281] bg-opacity-20 px-2 py-1 rounded-full">
+                    {filteredUsers.length} user(s) found
+                  </span>
+                </p>
+              </div>
+            )}
           </div>
           <button
             onClick={refreshUsers}
@@ -274,51 +298,66 @@ const UsersPage = () => {
         ) : filteredUsers.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             <User className="mx-auto mb-2 text-gray-300" size={32} />
-            <p>No users found.</p>
-            {searchQuery && (
-              <p className="text-sm mt-2">Try adjusting your search query</p>
-            )}
+            <h3 className="text-lg font-medium text-gray-900">
+              {searchQuery ? 'No matching users found!' : 'No users found!'}
+            </h3>
+            <p className="mt-1 text-gray-500">
+              {searchQuery 
+                ? `No users found matching "${searchQuery}". Try a different search term.`
+                : 'There are no users in the system yet.'
+              }
+            </p>
           </div>
         ) : (
-          <table className="min-w-full text-left text-sm text-gray-600">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 text-gray-700 text-sm font-medium">
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Is Admin</th>
-                <th className="px-4 py-3">Joined</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.map((user) => (
-                <tr
-                  key={user.id}
-                  className="hover:bg-gray-50 transition-colors border-b border-gray-100"
-                >
-                  <td className="px-4 py-3 font-medium">{user.name || "—"}</td>
-                  <td className="px-4 py-3">{user.email || "—"}</td>
-                  <td className="px-4 py-3">
-                    {user.isAdmin === true || user.isAdmin === "true" ? (
-                      <span className="inline-flex items-center text-green-600 font-medium">
-                        <ShieldCheck className="mr-1" size={14} /> Yes
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center text-gray-400">
-                        <ShieldOff className="mr-1" size={14} /> No
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center">
-                      <Calendar className="mr-2 text-gray-400" size={14} />
-                      {formatDate(user.created_at)}
-                    </div>
-                  </td>
+          <>
+            {/* Results Summary */}
+            {searchQuery && (
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  Found <span className="font-semibold">{filteredUsers.length}</span> user(s) matching "<span className="font-semibold">{searchQuery}</span>"
+                </p>
+              </div>
+            )}
+            
+            <table className="min-w-full text-left text-sm text-gray-600">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50 text-gray-700 text-sm font-medium">
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Is Admin</th>
+                  <th className="px-4 py-3">Joined</th>
                 </tr>
-              ))}
-            </tbody>
-
-          </table>
+              </thead>
+              <tbody>
+                {filteredUsers.map((user) => (
+                  <tr
+                    key={user.id}
+                    className="hover:bg-gray-50 transition-colors border-b border-gray-100"
+                  >
+                    <td className="px-4 py-3 font-medium">{user.name || "—"}</td>
+                    <td className="px-4 py-3">{user.email || "—"}</td>
+                    <td className="px-4 py-3">
+                      {user.isAdmin === true || user.isAdmin === "true" ? (
+                        <span className="inline-flex items-center text-green-600 font-medium">
+                          <ShieldCheck className="mr-1" size={14} /> Yes
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-gray-400">
+                          <ShieldOff className="mr-1" size={14} /> No
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center">
+                        <Calendar className="mr-2 text-gray-400" size={14} />
+                        {formatDate(user.created_at)}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </div>
     </div>
