@@ -55,7 +55,7 @@ app.post('/api/responseemail', async (req, res) => {
   try {
     console.log('📧 Received email request:', req.body);
     
-    const { presetId, action, adminNotes, rejectionReason, germanTitle, germanDescription, authorEmail } = req.body;
+    const { presetId, action, adminNotes, rejectionReason, germanTitle, germanDescription, authorEmail, presetImages } = req.body;
 
     // Validate required fields
     if (!presetId || !action) {
@@ -76,21 +76,54 @@ app.post('/api/responseemail', async (req, res) => {
     }
 
     console.log(`📧 Using email: ${userEmail}`);
+    console.log(`🖼️ Preset images count: ${presetImages ? presetImages.length : 0}`);
 
     let emailSubject = '';
     let emailHtml = '';
 
     if (action === 'approve') {
-      emailSubject = `Your Preset Has Been Approved`;
+      emailSubject = `🎉 Your Preset Has Been Approved - Eggception`;
+      
+      // Generate HTML for preset images - 6 images per line
+      let imagesHtml = '';
+      if (presetImages && presetImages.length > 0) {
+        const imageRows = [];
+        for (let i = 0; i < presetImages.length; i += 6) {
+          const rowImages = presetImages.slice(i, i + 6);
+          const rowHtml = `
+            <tr>
+              ${rowImages.map((imageUrl, index) => `
+                <td style="padding: 5px; text-align: center; vertical-align: top;">
+                  <img 
+                    src="${imageUrl}" 
+                    alt="Image ${i + index + 1}" 
+                    style="width: 80px; height: 80px; object-fit: cover; border: 1px solid #000000;"
+                  />
+                  <div style="font-size: 10px; margin-top: 2px; color: #000000;">${i + index + 1}</div>
+                </td>
+              `).join('')}
+              ${Array(6 - rowImages.length).fill('<td style="width: 80px;"></td>').join('')}
+            </tr>
+          `;
+          imageRows.push(rowHtml);
+        }
+        
+        imagesHtml = `
+          <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+            ${imageRows.join('')}
+          </table>
+        `;
+      }
       
       emailHtml = `
         <!DOCTYPE html>
         <html>
         <head>
+            <meta charset="UTF-8">
             <style>
                 body { 
                     font-family: Arial, sans-serif; 
-                    line-height: 1.6; 
+                    line-height: 1.4; 
                     color: #000000; 
                     background-color: #ffffff; 
                     margin: 0; 
@@ -102,29 +135,29 @@ app.post('/api/responseemail', async (req, res) => {
                     padding: 20px; 
                     background-color: #ffffff; 
                 }
+                h1, h2, h3 { 
+                    color: #000000; 
+                    margin: 0 0 10px 0;
+                }
+                p { 
+                    margin: 0 0 10px 0; 
+                }
                 .header { 
                     padding: 20px 0; 
                     text-align: center; 
-                    border-bottom: 1px solid #eeeeee; 
+                    border-bottom: 2px solid #000000; 
                     margin-bottom: 20px; 
                 }
-                .content { 
+                .section { 
+                    margin: 15px 0; 
                     padding: 0; 
                 }
-                .details { 
-                    margin: 20px 0; 
-                    padding: 15px; 
-                    background-color: #f8f8f8; 
-                }
                 .footer { 
-                    margin-top: 30px; 
-                    padding-top: 20px; 
-                    border-top: 1px solid #eeeeee; 
-                    font-size: 14px; 
-                    color: #666666; 
-                }
-                h1, h2, h3 { 
-                    color: #000000; 
+                    margin-top: 20px; 
+                    padding-top: 15px; 
+                    border-top: 1px solid #000000; 
+                    font-size: 12px; 
+                    text-align: center;
                 }
             </style>
         </head>
@@ -133,35 +166,31 @@ app.post('/api/responseemail', async (req, res) => {
                 <div class="header">
                     <h1>Preset Approved</h1>
                 </div>
-                <div class="content">
-                    <h2>Great News!</h2>
-                    <p>Dear user, your preset has been approved and is now live on Eggception!</p>
-                    
-                    <div class="details">
-                        <h3>Preset Details:</h3>
-                        <p><strong>German Title:</strong> ${germanTitle || 'N/A'}</p>
-                        <p><strong>German Description:</strong> ${germanDescription || 'N/A'}</p>
-                    </div>
-
-                    ${adminNotes ? `
-                    <div class="details">
-                        <h3>Admin Notes:</h3>
-                        <p>${adminNotes}</p>
-                    </div>
-                    ` : ''}
-
-                    <p>Your preset is now available for other users to purchase and enjoy. Thank you for contributing to the Eggception community!</p>
-                </div>
                 
+                <div class="section">
+                    <h2>Your preset has been approved</h2>
+                    <p><strong>German Title:</strong> ${germanTitle || ''}</p>
+                    <p><strong>German Description:</strong> ${germanDescription || ''}</p>
+                </div>
+
+                ${imagesHtml}
+
+                ${adminNotes ? `
+                <div class="section">
+                    <h3>Admin Notes:</h3>
+                    <p>${adminNotes}</p>
+                </div>
+                ` : ''}
+
                 <div class="footer">
-                    <p>Best regards,<br>The Eggception Team</p>
+                    <p>Eggception Team</p>
                 </div>
             </div>
         </body>
         </html>
       `;
     } else if (action === 'reject') {
-      emailSubject = `Your Preset Has Been Rejected`;
+      emailSubject = `Preset Rejected - Eggception`;
       
       emailHtml = `
         <!DOCTYPE html>
@@ -170,7 +199,7 @@ app.post('/api/responseemail', async (req, res) => {
             <style>
                 body { 
                     font-family: Arial, sans-serif; 
-                    line-height: 1.6; 
+                    line-height: 1.4; 
                     color: #000000; 
                     background-color: #ffffff; 
                     margin: 0; 
@@ -182,29 +211,29 @@ app.post('/api/responseemail', async (req, res) => {
                     padding: 20px; 
                     background-color: #ffffff; 
                 }
+                h1, h2, h3 { 
+                    color: #000000; 
+                    margin: 0 0 10px 0;
+                }
+                p { 
+                    margin: 0 0 10px 0; 
+                }
                 .header { 
                     padding: 20px 0; 
                     text-align: center; 
-                    border-bottom: 1px solid #eeeeee; 
+                    border-bottom: 2px solid #000000; 
                     margin-bottom: 20px; 
                 }
-                .content { 
+                .section { 
+                    margin: 15px 0; 
                     padding: 0; 
                 }
-                .details { 
-                    margin: 20px 0; 
-                    padding: 15px; 
-                    background-color: #f8f8f8; 
-                }
                 .footer { 
-                    margin-top: 30px; 
-                    padding-top: 20px; 
-                    border-top: 1px solid #eeeeee; 
-                    font-size: 14px; 
-                    color: #666666; 
-                }
-                h1, h2, h3 { 
-                    color: #000000; 
+                    margin-top: 20px; 
+                    padding-top: 15px; 
+                    border-top: 1px solid #000000; 
+                    font-size: 12px; 
+                    text-align: center;
                 }
             </style>
         </head>
@@ -213,28 +242,21 @@ app.post('/api/responseemail', async (req, res) => {
                 <div class="header">
                     <h1>Preset Rejected</h1>
                 </div>
-                <div class="content">
-                    <h2>Attention Required</h2>
-                    <p>Dear user, your preset has been rejected.</p>
-
-                    <div class="details">
-                        <h3>Reason for Rejection:</h3>
-                        <p>${rejectionReason || 'No specific reason provided.'}</p>
-                    </div>
-
-                    ${adminNotes ? `
-                    <div class="details">
-                        <h3>Admin Notes:</h3>
-                        <p>${adminNotes}</p>
-                    </div>
-                    ` : ''}
-
-                    <p>Please review the feedback above and make necessary changes to your preset.</p>
-                </div>
                 
+                <div class="section">
+                    <h2>Your preset needs changes</h2>
+                    <p><strong>Reason:</strong> ${rejectionReason || ''}</p>
+                </div>
+
+                ${adminNotes ? `
+                <div class="section">
+                    <h3>Admin Notes:</h3>
+                    <p>${adminNotes}</p>
+                </div>
+                ` : ''}
+
                 <div class="footer">
-                    <p>If you have any questions, please don't hesitate to contact us.</p>
-                    <p>Best regards,<br>The Eggception Team</p>
+                    <p>Eggception Team</p>
                 </div>
             </div>
         </body>
@@ -256,6 +278,7 @@ app.post('/api/responseemail', async (req, res) => {
     };
 
     console.log(`📧 Sending email to: ${userEmail}`);
+    console.log(`🖼️ Including ${presetImages ? presetImages.length : 0} images in approval email`);
     
     try {
       const emailResult = await transporter.sendMail(mailOptions);
@@ -265,7 +288,8 @@ app.post('/api/responseemail', async (req, res) => {
       res.json({
         success: true,
         message: `Email sent successfully to ${userEmail}`,
-        emailId: emailResult.messageId
+        emailId: emailResult.messageId,
+        imagesIncluded: presetImages ? presetImages.length : 0
       });
     } catch (emailError) {
       console.error('❌ Email sending failed:', emailError);
@@ -295,20 +319,9 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Test endpoint
-app.post('/api/test', (req, res) => {
-  console.log('Test endpoint hit:', req.body);
-  res.json({ 
-    success: true, 
-    message: 'Test endpoint working',
-    received: req.body
-  });
-});
-
 // Start server
 app.listen(PORT, () => {
   console.log(`✅ Email server running on http://localhost:${PORT}`);
   console.log(`📧 Email endpoint: http://localhost:${PORT}/api/responseemail`);
-  console.log(`🧪 Test endpoint: http://localhost:${PORT}/api/test`);
   console.log(`🌐 Allowed origins: http://localhost:3001, https://egg-store-admin.vercel.app`);
 });

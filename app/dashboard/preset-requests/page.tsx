@@ -392,122 +392,126 @@ const Page = () => {
     };
   }, [currentView]);
 
-  // Handle preset approval with localhost API
-  const handleApprovePreset = async (presetId: string) => {
-    if (!confirm("Are you sure you want to approve this preset? It will become publicly visible.")) {
+// Handle preset approval with localhost API
+const handleApprovePreset = async (presetId: string) => {
+  if (!confirm("Are you sure you want to approve this preset? It will become publicly visible.")) {
+    return;
+  }
+
+  setIsLoading(true);
+  
+  try {
+    const germanTitle = prompt("Please enter German title for this preset:");
+    const germanDescription = prompt("Please enter German description for this preset:");
+    
+    if (!germanTitle || !germanDescription) {
+      alert("German title and description are required for approval.");
+      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
-    
-    try {
-      const germanTitle = prompt("Please enter German title for this preset:");
-      const germanDescription = prompt("Please enter German description for this preset:");
-      
-      if (!germanTitle || !germanDescription) {
-        alert("German title and description are required for approval.");
-        setIsLoading(false);
-        return;
-      }
+    const adminNotes = prompt("Optional admin notes for the author:") || '';
 
-      const adminNotes = prompt("Optional admin notes for the author:") || '';
-
-      // Get creator information for email
-      const presetToUpdate = preset.find(p => p.id === presetId);
-      if (!presetToUpdate) {
-        alert("Preset not found.");
-        setIsLoading(false);
-        return;
-      }
-
-      const creatorInfo = userInfo[presetToUpdate.created_by];
-      const creatorEmail = creatorInfo?.email;
-      
-      console.log("Creator info:", creatorInfo);
-      console.log("Creator email:", creatorEmail);
-      
-      // Try localhost API first for email
-      if (creatorEmail && creatorEmail !== 'Email not available' && creatorEmail !== 'Error loading email' && creatorEmail !== 'Loading email...') {
-        try {
-          console.log("Attempting to send email to:", creatorEmail);
-          
-          const response = await fetch('http://localhost:8000/api/responseemail', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'approve',
-              presetId: presetId,
-              germanTitle: germanTitle,
-              germanDescription: germanDescription,
-              adminNotes: adminNotes,
-              authorEmail: creatorEmail
-            })
-          });
-
-          // Check if response is ok
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          const result = await response.json();
-          
-          if (result.success) {
-            console.log("✅ Email sent successfully to:", creatorEmail);
-          } else {
-            console.log("❌ Email API returned error:", result.message);
-          }
-        } catch (apiError) {
-          console.log("❌ Localhost API failed, email not sent:", apiError);
-          // Continue with approval even if email fails
-        }
-      } else {
-        console.log("❌ Cannot send email: Creator email not available or invalid");
-        console.log("Available creator info:", creatorInfo);
-      }
-
-      // Update preset in Supabase (always do this regardless of email success)
-      const { data, error } = await supabase
-        .from('presets')
-        .update({
-          preset_status: 'approved',
-          is_public: true,
-          preset_name: {
-            en_name: presetToUpdate.preset_name?.en_name || germanTitle,
-            de_name: germanTitle
-          },
-          preset_desc: {
-            en_desc: presetToUpdate.preset_desc?.en_desc || '',
-            de_desc: germanDescription
-          },
-          admin_notes: adminNotes,
-          approved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', presetId)
-        .select();
-
-      if (error) {
-        console.error("Direct Supabase update error:", error);
-        alert(`Failed to approve preset: ${error.message}`);
-      } else {
-        alert("Preset approved successfully!");
-        // Refresh the list
-        const { data: updatedData } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
-        if (updatedData) {
-          setPreset(updatedData);
-        }
-      }
-
-    } catch (error) {
-      console.error("Error approving preset:", error);
-      alert("Error approving preset. Please try again.");
-    } finally {
+    // Get creator information for email
+    const presetToUpdate = preset.find(p => p.id === presetId);
+    if (!presetToUpdate) {
+      alert("Preset not found.");
       setIsLoading(false);
+      return;
     }
-  };
 
+    const creatorInfo = userInfo[presetToUpdate.created_by];
+    const creatorEmail = creatorInfo?.email;
+    
+    console.log("Creator info:", creatorInfo);
+    console.log("Creator email:", creatorEmail);
+    
+    // Try localhost API first for email
+    if (creatorEmail && creatorEmail !== 'Email not available' && creatorEmail !== 'Error loading email' && creatorEmail !== 'Loading email...') {
+      try {
+        console.log("Attempting to send email to:", creatorEmail);
+        
+        // ✅ YEH LINE ADD KARO - Get preset images for email
+        const presetImages = presetToUpdate.preset_images || [];
+        
+        const response = await fetch('https://egg-store-admin.vercel.app/api/responseemail', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'approve',
+            presetId: presetId,
+            germanTitle: germanTitle,
+            germanDescription: germanDescription,
+            adminNotes: adminNotes,
+            authorEmail: creatorEmail,
+            presetImages: presetImages // ✅ YEH ADD KARO
+          })
+        });
+
+        // Check if response is ok
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        
+        if (result.success) {
+          console.log("✅ Email sent successfully to:", creatorEmail);
+          console.log(`📸 ${presetImages.length} images included in email`);
+        } else {
+          console.log("❌ Email API returned error:", result.message);
+        }
+      } catch (apiError) {
+        console.log("❌ Localhost API failed, email not sent:", apiError);
+        // Continue with approval even if email fails
+      }
+    } else {
+      console.log("❌ Cannot send email: Creator email not available or invalid");
+      console.log("Available creator info:", creatorInfo);
+    }
+
+    // Update preset in Supabase (always do this regardless of email success)
+    const { data, error } = await supabase
+      .from('presets')
+      .update({
+        preset_status: 'approved',
+        is_public: true,
+        preset_name: {
+          en_name: presetToUpdate.preset_name?.en_name || germanTitle,
+          de_name: germanTitle
+        },
+        preset_desc: {
+          en_desc: presetToUpdate.preset_desc?.en_desc || '',
+          de_desc: germanDescription
+        },
+        admin_notes: adminNotes,
+        approved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', presetId)
+      .select();
+
+    if (error) {
+      console.error("Direct Supabase update error:", error);
+      alert(`Failed to approve preset: ${error.message}`);
+    } else {
+      alert("Preset approved successfully!");
+      // Refresh the list
+      const { data: updatedData } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
+      if (updatedData) {
+        setPreset(updatedData);
+      }
+    }
+
+  } catch (error) {
+    console.error("Error approving preset:", error);
+    alert("Error approving preset. Please try again.");
+  } finally {
+    setIsLoading(false);
+  }
+};
   // Handle preset rejection with localhost API
   const handleRejectPreset = async (presetId: string) => {
     const rejectionReason = prompt("Please provide reason for rejection:");
@@ -535,42 +539,44 @@ const Page = () => {
       console.log("Creator email for rejection:", creatorEmail);
 
       // Try localhost API first for email
-      if (creatorEmail && creatorEmail !== 'Email not available' && creatorEmail !== 'Error loading email' && creatorEmail !== 'Loading email...') {
-        try {
-          const response = await fetch('https://egg-store-admin.vercel.app/api/responseemail', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'reject',
-              presetId: presetId,
-              rejectionReason: rejectionReason,
-              authorEmail: creatorEmail
-            })
-          });
+   if (creatorEmail && creatorEmail !== 'Email not available' && creatorEmail !== 'Error loading email' && creatorEmail !== 'Loading email...') {
+  try {
+    console.log("Attempting to send rejection email to:", creatorEmail);
+    
+    // Get preset images for rejection email bhi if needed
+    const presetImages = presetToUpdate.preset_images || [];
+    
+    const response = await fetch('http://localhost:8000/api/responseemail', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'reject',
+        presetId: presetId,
+        rejectionReason: rejectionReason,
+        authorEmail: creatorEmail,
+        presetImages: presetImages // Images bhi include karo
+      })
+    });
 
-          // Check if response is ok
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
+    // Check if response is ok
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-          const result = await response.json();
-          
-          if (result.success) {
-            console.log("Rejection email sent successfully to:", creatorEmail);
-          } else {
-            throw new Error(result.message);
-          }
-        } catch (apiError) {
-          console.log("Localhost API failed, email not sent:", apiError);
-          // Continue with rejection even if email fails
-        }
-      } else {
-        console.log("Cannot send rejection email: Creator email not available or invalid");
-        console.log("Available creator info:", creatorInfo);
-      }
-
+    const result = await response.json();
+    
+    if (result.success) {
+      console.log("✅ Rejection email sent successfully to:", creatorEmail);
+    } else {
+      throw new Error(result.message);
+    }
+  } catch (apiError) {
+    console.log("❌ Localhost API failed, email not sent:", apiError);
+    // Continue with rejection even if email fails
+  }
+}
       // Update preset in Supabase (always do this regardless of email success)
       const { data, error } = await supabase
         .from('presets')
