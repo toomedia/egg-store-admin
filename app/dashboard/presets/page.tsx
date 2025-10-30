@@ -16,7 +16,12 @@ import {
   ChevronDown,
   X,
   Check,
-  Loader2
+  Loader2,
+  User,
+  Mail,
+  CheckCircle,
+  XCircle,
+  Clock
 } from "lucide-react"
 
 interface PresetName {
@@ -50,6 +55,12 @@ interface Preset {
   preset_price: string;
   preset_images: string[];
   created_at: string;
+  created_by: string;
+  preset_status?: 'draft' | 'pending_approval' | 'approved' | 'rejected';
+  admin_notes?: string;
+  rejection_reason?: string;
+  approved_at?: string;
+  approved_by?: string;
 }
 
 interface FormData {
@@ -60,6 +71,12 @@ interface FormData {
   size: PresetSize;
   price: string;
   images: PresetImage[];
+}
+
+interface UserInfo {
+  id: string;
+  email: string;
+  username?: string;
 }
 
 // IndexedDB constants
@@ -170,6 +187,8 @@ const Page = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<string>('');
+  const [userInfo, setUserInfo] = useState<{ [key: string]: UserInfo }>({});
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending_approval' | 'approved' | 'rejected'>('all');
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -186,21 +205,50 @@ const Page = () => {
     { value: 24, price: 0.99 },
   ];
 
-  // Filter presets based on search query
+  // Filter presets based on search query and status
   useEffect(() => {
-    if (!searchQuery) {
-      setFilteredPreset(preset);
-    } else {
-      const filtered = preset.filter(item => 
+    let filtered = preset;
+    
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(item => item.preset_status === statusFilter);
+    }
+    
+    // Apply search filter
+    if (searchQuery) {
+      filtered = filtered.filter(item => 
         item.preset_name?.en_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.preset_name?.de_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.preset_desc?.en_desc?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.preset_desc?.de_desc?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.id.toLowerCase().includes(searchQuery.toLowerCase())
       );
-      setFilteredPreset(filtered);
     }
-  }, [preset, searchQuery]);
+    
+    setFilteredPreset(filtered);
+  }, [preset, searchQuery, statusFilter]);
+
+  // Fetch user info for creators
+  const fetchUserInfo = async (userId: string) => {
+    if (!userId || userInfo[userId]) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, username')
+        .eq('id', userId)
+        .single();
+      
+      if (data && !error) {
+        setUserInfo(prev => ({
+          ...prev,
+          [userId]: data
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    }
+  };
 
   useEffect(() => {
     const fetchAllPresets = async () => {
@@ -208,7 +256,7 @@ const Page = () => {
         let allPresets: any[] = [];
         setDataSource('Supabase');
         
-        const { data, error } = await supabase.from('presets').select('*');
+        const { data, error } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
         if (error) {
           console.error("Error fetching presets:", error);
           return;
@@ -216,6 +264,13 @@ const Page = () => {
         
         allPresets = data || [];
         
+        // Fetch user info for all creators
+        allPresets.forEach(preset => {
+          if (preset.created_by) {
+            fetchUserInfo(preset.created_by);
+          }
+        });
+
         // Save to IndexedDB
         try {
           await setItem(ALL_PRESETS_KEY, allPresets);
@@ -243,7 +298,7 @@ const Page = () => {
         async (payload) => {
           setDataSource('Supabase Realtime');
 
-          const { data, error } = await supabase.from('presets').select('*');
+          const { data, error } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
           
           if (error) {
             console.error("Error refetching presets:", error);
@@ -269,6 +324,192 @@ const Page = () => {
       supabase.removeChannel(channel);
     };
   }, [currentView]);
+
+  // Handle preset approval with fallback
+  const handleApprovePreset = async (presetId: string) => {
+    if (!confirm("Are you sure you want to approve this preset? It will become publicly visible.")) {
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const germanTitle = prompt("Please enter German title for this preset:");
+      const germanDescription = prompt("Please enter German description for this preset:");
+      
+      if (!germanTitle || !germanDescription) {
+        alert("German title and description are required for approval.");
+        setIsLoading(false);
+        return;
+      }
+
+      const adminNotes = prompt("Optional admin notes for the author:") || '';
+
+      // Try backend API first
+      try {
+        const response = await fetch('http://localhost:8000/api/adminapproval', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'approve',
+            presetId: presetId,
+            germanTitle: germanTitle,
+            germanDescription: germanDescription,
+            adminNotes: adminNotes,
+            authorEmail: userInfo[preset.find(p => p.id === presetId)?.created_by || '']?.email || ''
+          })
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          alert("Preset approved successfully!");
+          // Refresh the list
+          const { data } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
+          if (data) {
+            setPreset(data);
+          }
+          return;
+        } else {
+          throw new Error(result.message);
+        }
+      } catch (apiError) {
+        console.log("Backend API failed, trying direct Supabase update...");
+        
+        // Fallback: Direct Supabase update
+        const presetToUpdate = preset.find(p => p.id === presetId);
+        if (!presetToUpdate) {
+          alert("Preset not found.");
+          setIsLoading(false);
+          return;
+        }
+
+        // Update preset directly in Supabase
+        const { data, error } = await supabase
+          .from('presets')
+          .update({
+            preset_status: 'approved',
+            is_public: true,
+            preset_name: {
+              en_name: presetToUpdate.preset_name?.en_name || germanTitle,
+              de_name: germanTitle
+            },
+            admin_notes: adminNotes,
+            approved_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', presetId)
+          .select();
+
+        if (error) {
+          console.error("Direct Supabase update error:", error);
+          alert(`Failed to approve preset: ${error.message}`);
+        } else {
+          alert("Preset approved successfully! (Direct update)");
+          // Refresh the list
+          const { data: updatedData } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
+          if (updatedData) {
+            setPreset(updatedData);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error approving preset:", error);
+      alert("Error approving preset. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle preset rejection with fallback
+  const handleRejectPreset = async (presetId: string) => {
+    const rejectionReason = prompt("Please provide reason for rejection:");
+    
+    if (!rejectionReason) {
+      alert("Rejection reason is required.");
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      // Try backend API first
+      try {
+        const response = await fetch('http://localhost:8000/api/adminapproval', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'reject',
+            presetId: presetId,
+            rejectionReason: rejectionReason
+          })
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          alert("Preset rejected successfully!");
+          // Refresh the list
+          const { data } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
+          if (data) {
+            setPreset(data);
+          }
+          return;
+        } else {
+          throw new Error(result.message);
+        }
+      } catch (apiError) {
+        console.log("Backend API failed, trying direct Supabase update...");
+        
+        // Fallback: Direct Supabase update
+        const { data, error } = await supabase
+          .from('presets')
+          .update({
+            preset_status: 'rejected',
+            is_public: false,
+            rejection_reason: rejectionReason,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', presetId)
+          .select();
+
+        if (error) {
+          console.error("Direct Supabase update error:", error);
+          alert(`Failed to reject preset: ${error.message}`);
+        } else {
+          alert("Preset rejected successfully! (Direct update)");
+          // Refresh the list
+          const { data: updatedData } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
+          if (updatedData) {
+            setPreset(updatedData);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error rejecting preset:", error);
+      alert("Error rejecting preset. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Get status badge
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending_approval':
+        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full flex items-center w-fit"><Clock className="mr-1" size={12} />Pending</span>;
+      case 'approved':
+        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center w-fit"><CheckCircle className="mr-1" size={12} />Approved</span>;
+      case 'rejected':
+        return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full flex items-center w-fit"><XCircle className="mr-1" size={12} />Rejected</span>;
+      default:
+        return <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Draft</span>;
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -298,7 +539,7 @@ const Page = () => {
       setIsLoading(false);
       return;
     }
-  
+
     try {
       // First, delete any images marked for deletion
       const imagesToDelete = formData.images.filter(
@@ -370,11 +611,11 @@ const Page = () => {
 
       // Store only unique images in Supabase (duplication handled in application logic)
       const finalImageUrls = uploadedImageUrls;
-  
+
       formData.images.forEach(img => {
         if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
       });
-  
+
       let data: any = null;
       let error: any = null;
       
@@ -389,38 +630,8 @@ const Page = () => {
         if (checkError || !existingPreset) {
           error = { message: 'Preset not found. It may have been deleted.' };
         } else {
-          // Update existing preset
-          const { data: updateData, error: updateError } = await supabase
-            .from("presets")
-            .update({
-              preset_name: {
-                en_name: formData.titleEn,
-                de_name: formData.titleDe,
-              },
-              preset_desc: {
-                en_desc: formData.descEn,
-                de_desc: formData.descDe,
-              },
-              preset_size_json: formData.size,
-              preset_price: formData.price,
-              preset_images: finalImageUrls,
-            })
-            .eq('id', editingId)
-            .select("*");
-          
-          if (updateError) {
-            error = updateError;
-          } else if (!updateData || updateData.length === 0) {
-            error = { message: 'Preset not found or no changes made' };
-          } else {
-            data = updateData[0];
-          }
-        }
-      } else {
-        // Create new preset
-        const { data: insertData, error: insertError } = await supabase
-          .from("presets")
-          .insert({
+          // Update existing preset - ONLY EXISTING COLUMNS USE करें
+          const updateData = {
             preset_name: {
               en_name: formData.titleEn,
               de_name: formData.titleDe,
@@ -432,24 +643,60 @@ const Page = () => {
             preset_size_json: formData.size,
             preset_price: formData.price,
             preset_images: finalImageUrls,
-          })
+          };
+
+          const { data: updateDataResult, error: updateError } = await supabase
+            .from("presets")
+            .update(updateData)
+            .eq('id', editingId)
+            .select("*");
+          
+          if (updateError) {
+            error = updateError;
+          } else if (!updateDataResult || updateDataResult.length === 0) {
+            error = { message: 'Preset not found or no changes made' };
+          } else {
+            data = updateDataResult[0];
+          }
+        }
+      } else {
+        // Create new preset - ONLY EXISTING COLUMNS USE करें
+        const insertData = {
+          preset_name: {
+            en_name: formData.titleEn,
+            de_name: formData.titleDe,
+          },
+          preset_desc: {
+            en_desc: formData.descEn,
+            de_desc: formData.descDe,
+          },
+          preset_size_json: formData.size,
+          preset_price: formData.price,
+          preset_images: finalImageUrls,
+          created_at: new Date().toISOString()
+        };
+
+        const { data: insertDataResult, error: insertError } = await supabase
+          .from("presets")
+          .insert(insertData)
           .select("*");
         
         if (insertError) {
           error = insertError;
-        } else if (!insertData || insertData.length === 0) {
+        } else if (!insertDataResult || insertDataResult.length === 0) {
           error = { message: 'Failed to create preset' };
         } else {
-          data = insertData[0];
+          data = insertDataResult[0];
         }
       }
-  
+
       if (error) {
+        console.error("Database error:", error);
         alert(`Failed to ${editingId ? 'update' : 'create'} preset: ${error.message}`);
         setIsLoading(false);
         return;
       }
-  
+
       alert(editingId ? "Preset updated successfully!" : "Preset created successfully!");
       
       let updatedPresets;
@@ -471,12 +718,13 @@ const Page = () => {
       
       setCurrentView("list");
       setEditingId(null);
-  
+
     } catch (err) {
       console.error("Unexpected error in handleSubmit:", err);
       formData.images.forEach(img => {
         if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
       });
+      alert("An unexpected error occurred. Please check console for details.");
     } finally {
       setIsLoading(false);
     }
@@ -506,15 +754,19 @@ const Page = () => {
           console.error("Error deleting images from storage:", storageError);
         }
       }
+
+      // Simple delete without extra columns
       const { error } = await supabase
         .from('presets')
         .delete()
         .eq('id', id);
 
       if (error) {
+        console.error("Delete error:", error);
         alert("Failed to delete preset. Please try again.");
         return;
       }
+
       const updatedPresets = preset.filter(item => item.id !== id);
       setPreset(updatedPresets);
       try {
@@ -937,14 +1189,13 @@ const Page = () => {
     );
   }
 
-
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
           <div className='mb-4 md:mb-0'>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">Presets Management</h1>
-            <p className="text-gray-600">Manage all presets (collections of egg cards). Create, edit, and organize presets.</p>
+            <p className="text-gray-600">Manage all presets (collections of egg cards). Review, approve, and organize presets.</p>
             
             {/* Search Status */}
             {searchQuery && (
@@ -967,8 +1218,54 @@ const Page = () => {
             Create New Preset
           </button>
         </div>
+
+        {/* Status Filter */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`px-3 py-1 rounded-full text-sm font-medium ${
+              statusFilter === 'all' 
+                ? 'bg-[#e6d281] text-gray-800' 
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            All Presets
+          </button>
+          <button
+            onClick={() => setStatusFilter('pending_approval')}
+            className={`px-3 py-1 rounded-full text-sm font-medium flex items-center ${
+              statusFilter === 'pending_approval' 
+                ? 'bg-yellow-500 text-white' 
+                : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+            }`}
+          >
+            <Clock className="mr-1" size={14} />
+            Pending Approval
+          </button>
+          <button
+            onClick={() => setStatusFilter('approved')}
+            className={`px-3 py-1 rounded-full text-sm font-medium flex items-center ${
+              statusFilter === 'approved' 
+                ? 'bg-green-500 text-white' 
+                : 'bg-green-100 text-green-800 hover:bg-green-200'
+            }`}
+          >
+            <CheckCircle className="mr-1" size={14} />
+            Approved
+          </button>
+          <button
+            onClick={() => setStatusFilter('rejected')}
+            className={`px-3 py-1 rounded-full text-sm font-medium flex items-center ${
+              statusFilter === 'rejected' 
+                ? 'bg-red-500 text-white' 
+                : 'bg-red-100 text-red-800 hover:bg-red-200'
+            }`}
+          >
+            <XCircle className="mr-1" size={14} />
+            Rejected
+          </button>
+        </div>
       </div>
- 
   
       {filteredPreset.length > 0 ? (
         <div className="grid grid-cols-1 gap-6">
@@ -979,6 +1276,9 @@ const Page = () => {
                   <div className="w-full">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
                       <div className="mb-4 md:mb-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          {getStatusBadge(item.preset_status || 'draft')}
+                        </div>
                         <div className="mb-3">
                           <p className="text-xs text-gray-500 mb-1 flex items-center">
                             <Tag className="mr-1" size={14} />
@@ -1000,6 +1300,28 @@ const Page = () => {
                       </div>
       
                       <div className="flex flex-col items-start md:items-end gap-3 w-full md:w-auto">
+                        {/* Action Buttons based on status */}
+                        {item.preset_status === 'pending_approval' && (
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => handleApprovePreset(item.id)} 
+                              disabled={isLoading}
+                              className="px-3 py-1.5 bg-green-50 text-green-600 hover:bg-green-100 rounded-md text-sm font-medium flex items-center"
+                            >
+                              <CheckCircle className="mr-1" size={14} />
+                              {isLoading ? 'Approving...' : 'Approve'}
+                            </button>
+                            <button 
+                              onClick={() => handleRejectPreset(item.id)} 
+                              disabled={isLoading}
+                              className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-sm font-medium flex items-center"
+                            >
+                              <XCircle className="mr-1" size={14} />
+                              {isLoading ? 'Rejecting...' : 'Reject'}
+                            </button>
+                          </div>
+                        )}
+                        
                         <div className="flex gap-2">
                           <button 
                             onClick={() => handleEdit(item.id)} 
@@ -1022,14 +1344,35 @@ const Page = () => {
                           </button>
                         </div>
 
-                          <div className="bg-gray-100 px-3 py-2 rounded-lg text-center">
-                            <p className="text-xs text-gray-500 flex items-center justify-center">
-                              <Layers className="mr-1" size={12} />
-                              {item.preset_size_json?.value || 'N/A'} cards
-                            </p>
-                          </div>
+                        <div className="bg-gray-100 px-3 py-2 rounded-lg text-center">
+                          <p className="text-xs text-gray-500 flex items-center justify-center">
+                            <Layers className="mr-1" size={12} />
+                            {item.preset_size_json?.value || 'N/A'} cards
+                          </p>
+                        </div>
                       </div>
                     </div>
+
+                    {/* Creator Information */}
+                    {item.created_by && (
+                      <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                        <p className="text-xs text-blue-600 mb-2 font-medium">Creator Information</p>
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center">
+                            <User className="text-blue-500 mr-1" size={14} />
+                            <span className="text-sm text-gray-700">
+                              {userInfo[item.created_by]?.username || 'Unknown User'}
+                            </span>
+                          </div>
+                          <div className="flex items-center">
+                            <Mail className="text-blue-500 mr-1" size={14} />
+                            <span className="text-sm text-gray-700">
+                              {userInfo[item.created_by]?.email || item.created_by}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
                       <div>
@@ -1069,7 +1412,34 @@ const Page = () => {
                           {new Date(item.created_at).toLocaleDateString()}
                         </p>
                       </div>
+                      {item.approved_at && (
+                        <div>
+                          <p className="text-xs text-gray-500 flex items-center">
+                            <CheckCircle className="mr-1" size={12} />
+                            Approved
+                          </p>
+                          <p className="text-sm font-medium">
+                            {new Date(item.approved_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Admin Notes */}
+                    {item.admin_notes && (
+                      <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
+                        <p className="text-xs text-yellow-700 mb-1 font-medium">Admin Notes</p>
+                        <p className="text-sm text-yellow-800">{item.admin_notes}</p>
+                      </div>
+                    )}
+
+                    {/* Rejection Reason */}
+                    {item.rejection_reason && (
+                      <div className="mt-4 p-3 bg-red-50 rounded-lg">
+                        <p className="text-xs text-red-700 mb-1 font-medium">Rejection Reason</p>
+                        <p className="text-sm text-red-800">{item.rejection_reason}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
     
@@ -1101,30 +1471,32 @@ const Page = () => {
               <ImageIcon size={48} />
             </div>
             <h3 className="text-lg font-medium text-gray-900">
-              {searchQuery ? 'No matching presets found!' : 'No presets found!'}
+              {searchQuery || statusFilter !== 'all' ? 'No matching presets found!' : 'No presets found!'}
             </h3>
             <p className="mt-1 text-gray-500 mb-6">
               {searchQuery 
                 ? `No presets found matching "${searchQuery}". Try a different search term.`
+                : statusFilter !== 'all'
+                ? `No presets found with status "${statusFilter}".`
                 : 'Get started by creating your first preset.'
               }
             </p>
             {isLoading ? (
               <button
-              onClick={() => setCurrentView('create')}
-              className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
-            >
-              <Loader2 className="mr-2" size={16} />
-              Creating Preset...
-            </button>
+                onClick={() => setCurrentView('create')}
+                className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
+              >
+                <Loader2 className="mr-2" size={16} />
+                Creating Preset...
+              </button>
             ):(
-            <button
-              onClick={() => setCurrentView('create')}
-              className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
-            >
-              <PlusCircle className="mr-2" size={16} />
-              Create Preset
-            </button>
+              <button
+                onClick={() => setCurrentView('create')}
+                className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
+              >
+                <PlusCircle className="mr-2" size={16} />
+                Create Preset
+              </button>
             )}
           </div>
         </div>
