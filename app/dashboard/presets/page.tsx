@@ -21,7 +21,11 @@ import {
   Mail,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  Search,
+  Grid,
+  CheckSquare,
+  Square
 } from "lucide-react"
 
 interface PresetName {
@@ -79,15 +83,35 @@ interface UserInfo {
   username?: string;
 }
 
+interface Creation {
+  id: string;
+  title: string;
+  image_url: string;
+  prompt: string;
+  source: string; 
+  creator_id: string;
+  creator: {
+    id: string;
+    name: string | null;
+    avatar_url: string | null;
+  };
+  tags: string[];
+  likes: number;
+  downloads: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // IndexedDB constants
 const DB_NAME = 'PresetsDB';
 const STORE_NAME = 'presets';
 const ALL_PRESETS_KEY = 'allPresets';
+const OWN_CREATIONS_KEY = 'ownCreations';
 
 // IndexedDB utility functions
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, 2);
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
@@ -97,16 +121,19 @@ const openDB = (): Promise<IDBDatabase> => {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME);
       }
+      if (event.oldVersion < 2 && !db.objectStoreNames.contains('ownCreations')) {
+        db.createObjectStore('ownCreations');
+      }
     };
   });
 };
 
-const setItem = async (key: string, value: any): Promise<void> => {
+const setItem = async (key: string, value: any, store: string = STORE_NAME): Promise<void> => {
   try {
     const db = await openDB();
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    store.put(value, key);
+    const transaction = db.transaction(store, 'readwrite');
+    const objectStore = transaction.objectStore(store);
+    objectStore.put(value, key);
     return new Promise((resolve, reject) => {
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
@@ -116,12 +143,12 @@ const setItem = async (key: string, value: any): Promise<void> => {
   }
 };
 
-const getItem = async (key: string): Promise<any> => {
+const getItem = async (key: string, store: string = STORE_NAME): Promise<any> => {
   try {
     const db = await openDB();
-    const transaction = db.transaction(STORE_NAME, 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.get(key);
+    const transaction = db.transaction(store, 'readonly');
+    const objectStore = transaction.objectStore(store);
+    const request = objectStore.get(key);
     
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
@@ -132,6 +159,60 @@ const getItem = async (key: string): Promise<any> => {
   }
 };
 
+// Debugging function to track image sources
+const debugImageSources = (eggs: Creation[], source: string) => {
+  console.group(`🔍 IMAGE SOURCE DEBUG - ${source}`);
+  
+  // Count by source type
+  const sourceCounts = eggs.reduce((acc, egg) => {
+    const sourceType = egg.source || 'unknown';
+    acc[sourceType] = (acc[sourceType] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  
+  console.log('📊 Source Distribution:', sourceCounts);
+  console.log('📈 Total Eggs:', eggs.length);
+  
+  // Find problematic URLs
+  const problematicUrls = eggs.filter(egg => 
+    egg.image_url && 
+    typeof egg.image_url === 'string' &&
+    (egg.image_url.startsWith('" ') || egg.image_url.includes('" kaja'))
+  );
+  
+  if (problematicUrls.length > 0) {
+    console.log('🚨 PROBLEMATIC URLs found:', problematicUrls.length);
+    problematicUrls.slice(0, 3).forEach((egg, index) => {
+      console.log(`Problem ${index + 1}:`, {
+        id: egg.id,
+        source: egg.source,
+        image_url: egg.image_url,
+        preview: egg.image_url.substring(0, 100) + '...'
+      });
+    });
+  }
+  
+  // Sample valid URLs
+  const validUrls = eggs.filter(egg => 
+    egg.image_url && 
+    typeof egg.image_url === 'string' &&
+    (egg.image_url.startsWith('http') || egg.image_url.startsWith('data:'))
+  );
+  
+  if (validUrls.length > 0) {
+    console.log('✅ Valid URLs sample (first 3):');
+    validUrls.slice(0, 3).forEach((egg, index) => {
+      console.log(`Valid ${index + 1}:`, {
+        id: egg.id,
+        source: egg.source,
+        image_url: egg.image_url.substring(0, 100) + '...'
+      });
+    });
+  }
+  
+  console.groupEnd();
+};
+
 // Safe Image Component with optimized loading
 const SafeImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
   const [imgSrc, setImgSrc] = useState(src);
@@ -139,6 +220,7 @@ const SafeImage = ({ src, alt, className }: { src: string, alt: string, classNam
   const [hasError, setHasError] = useState(false);
 
   const handleError = () => {
+    console.warn('🖼️ Image failed to load:', { original: src });
     setHasError(true);
     setIsLoading(false);
   };
@@ -200,6 +282,14 @@ const Page = () => {
     images: [] 
   });
 
+  // Modal state for egg selection
+  const [showEggModal, setShowEggModal] = useState(false);
+  const [availableEggs, setAvailableEggs] = useState<Creation[]>([]);
+  const [selectedEggs, setSelectedEggs] = useState<string[]>([]);
+  const [eggSearchQuery, setEggSearchQuery] = useState('');
+  const [loadingEggs, setLoadingEggs] = useState(false);
+  const [eggsSource, setEggsSource] = useState<'cache' | 'supabase'>('cache');
+
   const sizes = [
     { value: 24, price: 0.99 },
   ];
@@ -208,7 +298,7 @@ const Page = () => {
   useEffect(() => {
     let filtered = preset;
     
-    // Apply search filter
+// Apply search filter
     if (searchQuery) {
       filtered = filtered.filter(item => 
         item.preset_name?.en_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -244,13 +334,339 @@ const Page = () => {
     }
   };
 
+  // Fetch available eggs for modal FROM INDEXEDDB
+  const fetchAvailableEggs = async () => {
+    setLoadingEggs(true);
+    try {
+      // First try to get from IndexedDB
+      const cachedEggs = await getItem(OWN_CREATIONS_KEY, 'ownCreations');
+      
+      if (cachedEggs && Array.isArray(cachedEggs) && cachedEggs.length > 0) {
+        console.log('💾 Loaded from IndexedDB cache:', cachedEggs.length, 'eggs');
+        debugImageSources(cachedEggs, 'INDEXEDDB_CACHE');
+        
+        setAvailableEggs(cachedEggs);
+        setEggsSource('cache');
+        setLoadingEggs(false);
+        return;
+      }
+
+      // If no cached data, fetch from Supabase and cache it
+      console.log('🌐 No cache found, fetching from Supabase...');
+      const fetchGeneratedImagesFromSupabase = async (): Promise<Creation[]> => {
+        try {
+          console.log('📡 Making Supabase API call to user_own_creations...');
+          const { data, error } = await supabase
+            .from('user_own_creations')
+            .select('*')
+            .order('created_at', { ascending: false });
+          
+          if (error) {
+            console.error('❌ Supabase error:', error);
+            return [];
+          }
+
+          if (!data || !Array.isArray(data)) {
+            console.log('⚠️ No data returned from Supabase');
+            return [];
+          }
+
+          console.log('📥 Raw Supabase data received:', data.length, 'records');
+          
+          const collectedCreations: Creation[] = [];
+          const seenImageUrls = new Set<string>();
+
+          console.log('🔧 Processing Supabase records...');
+          
+          for (const creation of data) {
+            const isGuest = !creation.user_uid || creation.user_uid === null;
+            const creationId = creation.id;
+
+            console.log(`🔄 Processing creation ${creationId}`, {
+              has_image_url: !!creation.image_url,
+              has_generated_images: !!creation.generated_images,
+              image_url_type: typeof creation.image_url
+            });
+
+            if (creation.image_url) {
+              try {
+                let imageUrls: string[] = [];
+                
+                if (typeof creation.image_url === 'string') {
+                  console.log(`📝 Processing image_url as string:`, creation.image_url.substring(0, 100) + '...');
+                  
+                  try {
+                    const parsed = JSON.parse(creation.image_url);
+                    console.log(`✅ Successfully parsed image_url as JSON`);
+                    
+                    if (Array.isArray(parsed)) {
+                      imageUrls = parsed.filter(url => typeof url === 'string' && url.length > 0);
+                      console.log(`📸 Found ${imageUrls.length} image URLs in JSON array`);
+                    }
+                  } catch (e) {
+                    console.log(`❌ Failed to parse as JSON, treating as direct URL`);
+                    if (creation.image_url.startsWith('http') || creation.image_url.startsWith('data:')) {
+                      imageUrls = [creation.image_url];
+                      console.log(`📸 Added as direct URL`);
+                    } else {
+                      console.log(`⚠️ Not a valid URL:`, creation.image_url.substring(0, 100));
+                    }
+                  }
+                } else if (Array.isArray(creation.image_url)) {
+                  console.log(`📝 Processing image_url as array with ${creation.image_url.length} items`);
+                  imageUrls = creation.image_url.filter((url: string) => typeof url === 'string' && url.length > 0);
+                }
+
+                imageUrls.forEach((imageUrl: string, index: number) => {
+                  if (imageUrl && typeof imageUrl === 'string' && !seenImageUrls.has(imageUrl)) {
+                    seenImageUrls.add(imageUrl);
+                    
+                    // Log problematic URLs
+                    if (imageUrl.startsWith('" ') || imageUrl.includes('" kaja')) {
+                      console.warn(`🚨 Found problematic URL in image_url:`, {
+                        creationId,
+                        index,
+                        url: imageUrl.substring(0, 100)
+                      });
+                    }
+                    
+                    collectedCreations.push({
+                      id: `${creationId}-image_url-${index}`,
+                      title: '',
+                      image_url: imageUrl,
+                      prompt: '', 
+                      source: 'image_url',
+                      creator_id: creation.user_uid || 'guest',
+                      creator: {
+                        id: creation.user_uid || 'guest',
+                        name: isGuest ? 'Guest User' : 'Registered User',
+                        avatar_url: null
+                      },
+                      tags: creation.tags || [],
+                      likes: creation.likes || 0,
+                      downloads: creation.downloads || 0,
+                      created_at: creation.created_at,
+                      updated_at: creation.updated_at || creation.created_at
+                    });
+                  }
+                });
+              } catch (error) {
+                console.error('Error processing image_url:', error, 'for creation:', creationId);
+              }
+            }
+
+            if (creation.generated_images) {
+              try {
+                let generatedImagesData: any[] = [];
+                
+                if (typeof creation.generated_images === 'string') {
+                  console.log(`📝 Processing generated_images as string`);
+                  try {
+                    const parsed = JSON.parse(creation.generated_images);
+                    console.log(`✅ Successfully parsed generated_images as JSON`);
+                    
+                    if (parsed.generated_images && Array.isArray(parsed.generated_images)) {
+                      generatedImagesData = parsed.generated_images;
+                      console.log(`📸 Found ${generatedImagesData.length} images in generated_images array`);
+                    } 
+                    else if (Array.isArray(parsed)) {
+                      generatedImagesData = parsed;
+                      console.log(`📸 Found ${generatedImagesData.length} images in array`);
+                    }
+                    else if (parsed.url || parsed.image_url) {
+                      generatedImagesData = [parsed];
+                      console.log(`📸 Found single image object`);
+                    }
+                  } catch (e) {
+                    console.log(`❌ Failed to parse generated_images as JSON`);
+                    if (creation.generated_images.startsWith('http') || creation.generated_images.startsWith('data:')) {
+                      generatedImagesData = [{ url: creation.generated_images, prompt: 'Generated image' }];
+                      console.log(`📸 Added as direct URL`);
+                    }
+                  }
+                } else if (typeof creation.generated_images === 'object') {
+                  console.log(`📝 Processing generated_images as object`);
+                  if (creation.generated_images.generated_images && Array.isArray(creation.generated_images.generated_images)) {
+                    generatedImagesData = creation.generated_images.generated_images;
+                    console.log(`📸 Found ${generatedImagesData.length} images in generated_images array`);
+                  } else if (Array.isArray(creation.generated_images)) {
+                    generatedImagesData = creation.generated_images;
+                    console.log(`📸 Found ${generatedImagesData.length} images in array`);
+                  } else {
+                    generatedImagesData = [creation.generated_images];
+                    console.log(`📸 Found single image object`);
+                  }
+                }
+
+                generatedImagesData.forEach((imgData: any, index: number) => {
+                  const imageUrl = imgData.url || imgData.image_url;
+                  const prompt = imgData.prompt || '';
+                  
+                  if (imageUrl && typeof imageUrl === 'string' && !seenImageUrls.has(imageUrl)) {
+                    seenImageUrls.add(imageUrl);
+                    
+                    // Log problematic URLs
+                    if (imageUrl.startsWith('" ') || imageUrl.includes('" kaja')) {
+                      console.warn(`🚨 Found problematic URL in generated_images:`, {
+                        creationId,
+                        index,
+                        url: imageUrl.substring(0, 100)
+                      });
+                    }
+                    
+                    collectedCreations.push({
+                      id: `${creationId}-generated_images-${index}`,
+                      title: '',
+                      image_url: imageUrl,
+                      prompt: prompt,
+                      source: 'generated_images',
+                      creator_id: creation.user_uid || 'guest',
+                      creator: {
+                        id: creation.user_uid || 'guest',
+                        name: isGuest ? 'Guest User' : 'Registered User',
+                        avatar_url: null
+                      },
+                      tags: creation.tags || [],
+                      likes: creation.likes || 0,
+                      downloads: creation.downloads || 0,
+                      created_at: creation.created_at,
+                      updated_at: creation.updated_at || creation.created_at
+                    });
+                  }
+                });
+              } catch (error) {
+                console.error('Error processing generated_images:', error, 'for creation:', creationId);
+              }
+            }
+          }
+
+          console.log('🎯 Final processed eggs:', collectedCreations.length);
+          return collectedCreations;
+        } catch (error) {
+          console.error('Error in fetchGeneratedImagesFromSupabase:', error);
+          return [];
+        }
+      };
+
+      const eggs = await fetchGeneratedImagesFromSupabase();
+      
+      // Debug the raw eggs before any filtering
+      debugImageSources(eggs, 'SUPABASE_RAW');
+      
+      // Filter out problematic eggs before caching
+      const validEggs = eggs.filter(egg => 
+        egg.image_url && 
+        typeof egg.image_url === 'string' &&
+        egg.image_url.trim().length > 0 &&
+        !egg.image_url.startsWith('" ') &&
+        (egg.image_url.startsWith('http') || egg.image_url.startsWith('data:'))
+      );
+
+      console.log('🎯 After filtering - Valid eggs:', validEggs.length);
+      console.log('🗑️  Removed eggs:', eggs.length - validEggs.length);
+      
+      // Cache the eggs in IndexedDB
+      if (validEggs.length > 0) {
+        try {
+          await setItem(OWN_CREATIONS_KEY, validEggs, 'ownCreations');
+          console.log('💾 Cached VALID eggs in IndexedDB:', validEggs.length);
+        } catch (error) {
+          console.error('Error caching eggs in IndexedDB:', error);
+        }
+      }
+      
+      setAvailableEggs(validEggs);
+      setEggsSource('supabase');
+      
+      // Final debug of what we're actually displaying
+      debugImageSources(validEggs, 'FINAL_DISPLAY');
+      
+    } catch (error) {
+      console.error('Error fetching available eggs:', error);
+    } finally {
+      setLoadingEggs(false);
+    }
+  };
+
+  // Refresh eggs from Supabase (manual refresh)
+  const refreshEggsFromSupabase = async () => {
+    setLoadingEggs(true);
+    try {
+      console.log('🔄 Manual refresh from Supabase...');
+      // Clear cached data first
+      try {
+        await setItem(OWN_CREATIONS_KEY, [], 'ownCreations');
+        console.log('🗑️ Cleared IndexedDB cache');
+      } catch (error) {
+        console.error('Error clearing cache:', error);
+      }
+      
+      // Fetch fresh data
+      await fetchAvailableEggs();
+    } catch (error) {
+      console.error('Error refreshing eggs:', error);
+    } finally {
+      setLoadingEggs(false);
+    }
+  };
+
+  // Open modal and fetch eggs
+  const handleOpenEggModal = () => {
+    console.log('🎯 Opening egg selection modal...');
+    if (!formData.size.value) {
+      alert("Please select a size first");
+      return;
+    }
+    setShowEggModal(true);
+    setSelectedEggs([]);
+    fetchAvailableEggs();
+  };
+
+  // Add selected eggs to form
+  const handleAddSelectedEggs = () => {
+    console.log('➕ Adding selected eggs to form:', selectedEggs.length);
+    
+    const selectedEggImages = availableEggs
+      .filter(egg => selectedEggs.includes(egg.id))
+      .map(egg => ({
+        fileObject: null,
+        previewUrl: egg.image_url,
+        isExisting: true,
+        originalUrl: egg.image_url,
+        markedForDeletion: false
+      }));
+
+    setFormData(prev => ({
+      ...prev,
+      images: [...prev.images, ...selectedEggImages]
+    }));
+
+    setShowEggModal(false);
+    setSelectedEggs([]);
+    setEggSearchQuery('');
+  };
+
+  // Filter eggs based on search
+  const filteredEggs = availableEggs.filter(egg => 
+    egg.prompt?.toLowerCase().includes(eggSearchQuery.toLowerCase()) ||
+    egg.tags?.some(tag => tag.toLowerCase().includes(eggSearchQuery.toLowerCase()))
+  );
+
+  // Toggle egg selection
+  const toggleEggSelection = (eggId: string) => {
+    setSelectedEggs(prev => 
+      prev.includes(eggId) 
+        ? prev.filter(id => id !== eggId)
+        : [...prev, eggId]
+    );
+  };
+
 useEffect(() => {
   const fetchAllPresets = async () => {
     try {
       let allPresets: any[] = [];
       setDataSource('Supabase');
       
-      // ✅ APPROVED OR NO STATUS PRESETS
       const { data, error } = await supabase
         .from('presets')
         .select('*')
@@ -264,14 +680,12 @@ useEffect(() => {
       
       allPresets = data || [];
       
-      // Fetch user info for all creators
       allPresets.forEach(preset => {
         if (preset.created_by) {
           fetchUserInfo(preset.created_by);
         }
       });
 
-      // Save to IndexedDB
       try {
         await setItem(ALL_PRESETS_KEY, allPresets);
       } catch (indexedDBError) {
@@ -298,7 +712,6 @@ useEffect(() => {
       async (payload) => {
         setDataSource('Supabase Realtime');
 
-        // ✅ APPROVED OR NO STATUS PRESETS IN REAL-TIME TOO
         const { data, error } = await supabase
           .from('presets')
           .select('*')
@@ -312,7 +725,6 @@ useEffect(() => {
         
         const updatedPresets = data || [];
         
-        // Update IndexedDB
         try {
           await setItem(ALL_PRESETS_KEY, updatedPresets);
         } catch (indexedDBError) {
@@ -324,13 +736,11 @@ useEffect(() => {
     )
     .subscribe();
 
-  // Cleanup on unmount
   return () => {
     supabase.removeChannel(channel);
   };
 }, [currentView]);
 
-// Get status badge - Only show for approved presets, hide for undefined/null
 const getStatusBadge = (status: string) => {
   switch (status) {
     case 'approved':
@@ -340,9 +750,10 @@ const getStatusBadge = (status: string) => {
     case 'rejected':
       return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full flex items-center w-fit"><XCircle className="mr-1" size={12} />Rejected</span>;
     default:
-      return null; // Return null for draft, undefined, or null status
+      return null;
   }
 };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -355,7 +766,6 @@ const getStatusBadge = (status: string) => {
     setIsLoading(true);
     e.preventDefault();
     
-    // Calculate active images (not marked for deletion)
     const activeImages = formData.images.filter(img => !img.markedForDeletion);
     
     if (activeImages.length === 0) {
@@ -364,7 +774,6 @@ const getStatusBadge = (status: string) => {
       return;
     }
 
-    // For matching pairs game, we only need half the number of unique images
     const requiredUniqueImages = Math.ceil(parseInt(String(formData.size.value)) / 2);
     if (activeImages.length !== requiredUniqueImages) {
       alert(`For a matching pairs game, you need exactly ${requiredUniqueImages} unique images (which will be duplicated to create ${formData.size.value} cards). Currently you have ${activeImages.length} images.`);
@@ -373,7 +782,6 @@ const getStatusBadge = (status: string) => {
     }
 
     try {
-      // First, delete any images marked for deletion
       const imagesToDelete = formData.images.filter(
         img => img.isExisting && img.markedForDeletion
       );
@@ -402,18 +810,14 @@ const getStatusBadge = (status: string) => {
         }
       }
       
-      // Upload new images and duplicate them for matching pairs
       const uploadedImageUrls: string[] = [];
 
       for (let image of formData.images) {
-        // Skip images marked for deletion
         if (image.markedForDeletion) continue;
         
         if (image.isExisting && image.originalUrl) {
-          // Keep existing image URL (if not marked for deletion)
           uploadedImageUrls.push(image.originalUrl);
         } else if (image.fileObject) {
-          // Upload new image
           const file = image.fileObject;
           const fileExt = file.name.split(".").pop();
           const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
@@ -441,7 +845,6 @@ const getStatusBadge = (status: string) => {
         }
       }
 
-      // Store only unique images in Supabase (duplication handled in application logic)
       const finalImageUrls = uploadedImageUrls;
 
       formData.images.forEach(img => {
@@ -452,7 +855,6 @@ const getStatusBadge = (status: string) => {
       let error: any = null;
       
       if (editingId) {
-        // First verify the preset exists
         const { data: existingPreset, error: checkError } = await supabase
           .from("presets")
           .select("id")
@@ -462,7 +864,6 @@ const getStatusBadge = (status: string) => {
         if (checkError || !existingPreset) {
           error = { message: 'Preset not found. It may have been deleted.' };
         } else {
-          // Update existing preset
           const updateData = {
             preset_name: {
               en_name: formData.titleEn,
@@ -492,7 +893,6 @@ const getStatusBadge = (status: string) => {
           }
         }
       } else {
-        // Create new preset
         const insertData = {
           preset_name: {
             en_name: formData.titleEn,
@@ -572,7 +972,6 @@ const getStatusBadge = (status: string) => {
     try {
       const presetToDelete = preset.find(item => item.id === id);
       if (presetToDelete && (presetToDelete.preset_images ?? []).length > 0) {
-        // Since we now store only unique images, we can delete all stored images directly
         const imagePaths = (presetToDelete.preset_images ?? []).map(url => {
           const urlParts = url.split('/');
           return `presets/${urlParts[urlParts.length - 1]}`;
@@ -587,7 +986,6 @@ const getStatusBadge = (status: string) => {
         }
       }
 
-      // Simple delete without extra columns
       const { error } = await supabase
         .from('presets')
         .delete()
@@ -620,7 +1018,6 @@ const getStatusBadge = (status: string) => {
   const handleEdit = (id: string) => {
     const presetToEdit = preset.find(item => item.id === id);
     if (presetToEdit) {
-      // Since we now store only unique images, we can use all stored images directly
       const existingImages = (presetToEdit.preset_images || []).map((imageUrl: string, index: number) => ({
         fileObject: null, 
         previewUrl: imageUrl,
@@ -643,23 +1040,18 @@ const getStatusBadge = (status: string) => {
     }
   };
 
-  // Function to handle image removal
   const handleImageRemove = (index: number) => {
     const imageToRemove = formData.images[index];
     
-    // Check if removing this image would make the count less than required
     const currentImageCount = formData.images.filter(img => !img.markedForDeletion).length;
     const requiredImageCount = Math.ceil(parseInt(String(formData.size.value)) / 2);
     
-    // If it's an existing image and we're not already at the minimum
     if (imageToRemove.isExisting && currentImageCount <= requiredImageCount) {
-      // Show confirmation dialog
       if (!confirm(`Removing this image would make your preset incomplete. You need ${requiredImageCount} unique images (which will be duplicated to create ${formData.size.value} cards). Are you sure you want to remove it?`)) {
-        return; // User canceled the removal
+        return;
       }
     }
     
-    // If it's an existing image, mark it for deletion instead of removing immediately
     if (imageToRemove.isExisting) {
       setFormData(prev => ({
         ...prev,
@@ -669,7 +1061,6 @@ const getStatusBadge = (status: string) => {
       }));
       console.log("Marked existing image for deletion:", imageToRemove.originalUrl);
     } else {
-      // If it's a new image (not yet uploaded), just remove it
       if (imageToRemove.fileObject) {
         URL.revokeObjectURL(imageToRemove.previewUrl);
       }
@@ -684,6 +1075,140 @@ const getStatusBadge = (status: string) => {
   if (currentView === 'create') {
     return (
       <div className="container mx-auto px-4 py-8 font-manrope">
+        {/* Egg Selection Modal */}
+        {showEggModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                    <Grid className="text-[#e6d281] mr-2" size={24} />
+                    Select from Existing Eggs
+                  </h2>
+                  <button 
+                    onClick={() => {
+                      setShowEggModal(false);
+                      setSelectedEggs([]);
+                      setEggSearchQuery('');
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <p className="text-gray-600 mt-2">
+                  Select eggs from your existing creations. Selected eggs will be added to your preset.
+                </p>
+                
+                <div className="mt-4 flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-1">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="text-gray-400" size={16} />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Search eggs by prompt or tags..."
+                      className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
+                      value={eggSearchQuery}
+                      onChange={(e) => setEggSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-gray-600">
+                      {selectedEggs.length} selected
+                    </span>
+                    <button
+                      onClick={refreshEggsFromSupabase}
+                      disabled={loadingEggs}
+                      className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm flex items-center disabled:opacity-50"
+                      title="Refresh from Supabase"
+                    >
+                      <Loader2 className={`mr-1 ${loadingEggs ? 'animate-spin' : ''}`} size={14} />
+                      Refresh
+                    </button>
+                    <button
+                      onClick={handleAddSelectedEggs}
+                      disabled={selectedEggs.length === 0}
+                      className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Add Selected Eggs
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-gray-500 flex items-center">
+                  <CheckCircle className="mr-1" size={12} />
+                  Loaded from {eggsSource} • {availableEggs.length} eggs available
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-auto p-6">
+                {loadingEggs ? (
+                  <div className="flex justify-center items-center h-32">
+                    <Loader2 className="animate-spin text-[#e6d281]" size={32} />
+                    <span className="ml-2 text-gray-600">Loading eggs...</span>
+                  </div>
+                ) : filteredEggs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <ImageIcon className="mx-auto text-gray-400 mb-4" size={48} />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No eggs found</h3>
+                    <p className="text-gray-500">
+                      {eggSearchQuery ? 'Try a different search term' : 'No eggs available in your creations'}
+                    </p>
+                    <button
+                      onClick={refreshEggsFromSupabase}
+                      className="mt-4 px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 rounded-lg"
+                    >
+                      Refresh from Supabase
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {filteredEggs.map((egg) => (
+                      <div
+                        key={egg.id}
+                        className={`relative group cursor-pointer border-2 rounded-lg overflow-hidden transition-all ${
+                          selectedEggs.includes(egg.id) 
+                            ? 'border-[#e6d281] ring-2 ring-[#e6d281] ring-opacity-30' 
+                            : 'border-gray-200 hover:border-[#e6d281]'
+                        }`}
+                        onClick={() => toggleEggSelection(egg.id)}
+                      >
+                        <div className="aspect-square relative">
+                          <Image
+                            src={egg.image_url}
+                            alt={egg.prompt || 'Egg creation'}
+                            fill
+                            className="object-cover"
+                            loading="lazy"
+                          />
+                          <div className={`absolute top-2 right-2 p-1 rounded-full ${
+                            selectedEggs.includes(egg.id) 
+                              ? 'bg-[#e6d281] text-gray-800' 
+                              : 'bg-white bg-opacity-80 text-gray-600'
+                          }`}>
+                            {selectedEggs.includes(egg.id) ? (
+                              <CheckSquare size={16} />
+                            ) : (
+                              <Square size={16} />
+                            )}
+                          </div>
+                        </div>
+                        {egg.prompt && (
+                          <div className="p-2 bg-white bg-opacity-90">
+                            <p className="text-xs text-gray-600 truncate" title={egg.prompt}>
+                              {egg.prompt.length > 50 ? `${egg.prompt.substring(0, 50)}...` : egg.prompt}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div 
           onClick={() => {
             setCurrentView('list');
@@ -866,56 +1391,64 @@ const getStatusBadge = (status: string) => {
               Upload Images
             </h2>
             
-            <div 
-              className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-[#e6d281] transition-colors cursor-pointer"
-              onClick={() => {
-                if(!formData.size.value){
-                  alert("Please select a size first"); 
-                  return;
-                }
-              }}
-            >
-              <div className="space-y-1 text-center">
-                <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="flex text-sm text-gray-600 justify-center">
-                  <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-[#e6d281] hover:text-[#d4c070] focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-[#e6d281]">
-                    <span>Upload files</span>
-                    <input 
-                      id="file-upload" 
-                      name="images" 
-                      type="file" 
-                      className="sr-only" 
-                      multiple 
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files.length > 0) {
-                          const filesArray = Array.from(e.target.files).map(file => ({
-                            fileObject: file,
-                            previewUrl: URL.createObjectURL(file),
-                            isExisting: false
-                          }));
-                          setFormData(prev => ({
-                            ...prev,
-                            images: [...prev.images, ...filesArray]
-                          }));
-                        }
-                      }}
-                    />
-                  </label>
-                  <p className="pl-1">or drag and drop</p>
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <button
+                type="button"
+                onClick={handleOpenEggModal}
+                disabled={!formData.size.value}
+                className="px-4 py-3 border-2 border-[#e6d281] text-[#e6d281] hover:bg-[#e6d281] hover:text-gray-800 font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:border-gray-400 disabled:text-gray-400 disabled:hover:bg-transparent flex items-center justify-center w-full sm:w-auto"
+              >
+                <Grid className="mr-2" size={18} />
+                Select from Existing Eggs
+              </button>
+              
+              <div 
+                className="flex-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-[#e6d281] transition-colors cursor-pointer"
+                onClick={() => {
+                  if(!formData.size.value){
+                    alert("Please select a size first"); 
+                    return;
+                  }
+                }}
+              >
+                <div className="space-y-1 text-center">
+                  <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
+                  <div className="flex text-sm text-gray-600 justify-center">
+                    <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-[#e6d281] hover:text-[#d4c070] focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-[#e6d281]">
+                      <span>Upload files</span>
+                      <input 
+                        id="file-upload" 
+                        name="images" 
+                        type="file" 
+                        className="sr-only" 
+                        multiple 
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            const filesArray = Array.from(e.target.files).map(file => ({
+                              fileObject: file,
+                              previewUrl: URL.createObjectURL(file),
+                              isExisting: false
+                            }));
+                            setFormData(prev => ({
+                              ...prev,
+                              images: [...prev.images, ...filesArray]
+                            }));
+                          }
+                        }}
+                      />
+                    </label>
+                    <p className="pl-1">or drag and drop</p>
+                  </div>
+                  <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
                 </div>
-                <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
-                {formData.size.value && (
-                  <p className="text-xs text-[#e6d281] mt-2">
-                    Selected size requires {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images (will be duplicated to create {formData.size.value} cards)
-                  </p>
-                )}
-                {editingId && (
-                  <p className="text-xs text-blue-600 mt-2">
-                    💡 You can add new images or remove existing ones
-                  </p>
-                )}
               </div>
             </div>
+
+            {formData.size.value && (
+              <p className="text-xs text-[#e6d281] mb-4 text-center">
+                Selected size requires {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images (will be duplicated to create {formData.size.value} cards)
+              </p>
+            )}
 
             {formData.images.length > 0 && (
               <div className="mt-6">
@@ -1116,27 +1649,6 @@ const getStatusBadge = (status: string) => {
                       </div>
                     </div>
 
-                    {/* Creator Information */}
-                    {/* {item.created_by && (
-                      <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                        <p className="text-xs text-blue-600 mb-2 font-medium">Creator Information</p>
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center">
-                            <User className="text-blue-500 mr-1" size={14} />
-                            <span className="text-sm text-gray-700">
-                              {userInfo[item.created_by]?.username || 'Unknown User'}
-                            </span>
-                          </div>
-                          <div className="flex items-center">
-                            <Mail className="text-blue-500 mr-1" size={14} />
-                            <span className="text-sm text-gray-700">
-                              {userInfo[item.created_by]?.email || item.created_by}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-     */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
                       <div>
                         <p className="text-xs text-gray-500 mb-1 flex items-center">
@@ -1188,7 +1700,6 @@ const getStatusBadge = (status: string) => {
                       )}
                     </div>
 
-                    {/* Admin Notes */}
                     {item.admin_notes && (
                       <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
                         <p className="text-xs text-yellow-700 mb-1 font-medium">Admin Notes</p>
