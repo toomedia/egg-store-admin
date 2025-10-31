@@ -92,26 +92,28 @@ app.post('/api/responseemail', async (req, res) => {
           const rowImages = presetImages.slice(i, i + 6);
           const rowHtml = `
             <tr>
-              ${rowImages.map((imageUrl, index) => `
-                <td style="padding: 5px; text-align: center; vertical-align: top;">
+              ${rowImages.map(imageUrl => `
+                <td style="padding: 8px; text-align: center; vertical-align: top;">
                   <img 
                     src="${imageUrl}" 
-                    alt="Image ${i + index + 1}" 
-                    style="width: 80px; height: 80px; object-fit: cover; border: 1px solid #000000;"
+                    alt="Preset preview" 
+                    style="width: 85px; height: 85px; object-fit: cover; border-radius: 8px;"
                   />
-                  <div style="font-size: 10px; margin-top: 2px; color: #000000;">${i + index + 1}</div>
                 </td>
               `).join('')}
-              ${Array(6 - rowImages.length).fill('<td style="width: 80px;"></td>').join('')}
+              ${Array(6 - rowImages.length).fill('<td style="width: 85px;"></td>').join('')}
             </tr>
           `;
           imageRows.push(rowHtml);
         }
         
         imagesHtml = `
-          <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
-            ${imageRows.join('')}
-          </table>
+          <div style="margin: 25px 0;">
+            <h3 style="color: #000000; margin-bottom: 15px; font-size: 16px; font-weight: 600;">Your Preset Images:</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              ${imageRows.join('')}
+            </table>
+          </div>
         `;
       }
       
@@ -122,8 +124,8 @@ app.post('/api/responseemail', async (req, res) => {
             <meta charset="UTF-8">
             <style>
                 body { 
-                    font-family: Arial, sans-serif; 
-                    line-height: 1.4; 
+                    font-family: 'Arial', sans-serif; 
+                    line-height: 1.6; 
                     color: #000000; 
                     background-color: #ffffff; 
                     margin: 0; 
@@ -132,65 +134,110 @@ app.post('/api/responseemail', async (req, res) => {
                 .container { 
                     max-width: 600px; 
                     margin: 0 auto; 
-                    padding: 20px; 
+                    padding: 30px 20px; 
                     background-color: #ffffff; 
                 }
-                h1, h2, h3 { 
+                .header { 
+                    text-align: center; 
+                    margin-bottom: 30px; 
+                    padding-bottom: 20px;
+                    border-bottom: 1px solid #f0f0f0;
+                }
+                .title { 
                     color: #000000; 
+                    font-size: 24px; 
+                    font-weight: bold; 
                     margin: 0 0 10px 0;
                 }
-                p { 
-                    margin: 0 0 10px 0; 
+                .subtitle {
+                    color: #666666;
+                    font-size: 16px;
+                    margin: 0;
                 }
-                .header { 
-                    padding: 20px 0; 
-                    text-align: center; 
-                    border-bottom: 2px solid #000000; 
-                    margin-bottom: 20px; 
+                .content {
+                    margin: 25px 0;
                 }
-                .section { 
-                    margin: 15px 0; 
-                    padding: 0; 
+                .preset-info {
+                    background-color: #f8f9fa;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                }
+                .info-label {
+                    font-weight: 600;
+                    color: #000000;
+                    margin-bottom: 5px;
+                }
+                .info-value {
+                    color: #333333;
+                    margin-bottom: 12px;
+                }
+                .success-message {
+                    background-color: #d4edda;
+                    color: #155724;
+                    padding: 15px;
+                    border-radius: 6px;
+                    margin: 20px 0;
+                    border-left: 4px solid #28a745;
                 }
                 .footer { 
-                    margin-top: 20px; 
-                    padding-top: 15px; 
-                    border-top: 1px solid #000000; 
+                    margin-top: 30px; 
+                    padding-top: 20px; 
+                    border-top: 1px solid #f0f0f0; 
                     font-size: 12px; 
                     text-align: center;
+                    color: #666666;
                 }
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>Preset Approved</h1>
+                    <div class="title">🎉 Congratulations!</div>
+                    <div class="subtitle">Your preset has been approved</div>
                 </div>
                 
-                <div class="section">
-                    <h2>Your preset has been approved</h2>
-                    <p><strong>German Title:</strong> ${germanTitle || ''}</p>
-                    <p><strong>German Description:</strong> ${germanDescription || ''}</p>
-                </div>
+                <div class="content">
+                    <div class="success-message">
+                        <strong>Great news!</strong> Your preset has been approved and will be published publicly in the Eggception store.
+                    </div>
 
-                ${imagesHtml}
+                    <div class="preset-info">
+                        <div class="info-label">German Title:</div>
+                        <div class="info-value">${germanTitle || 'N/A'}</div>
+                        
+                        <div class="info-label">German Description:</div>
+                        <div class="info-value">${germanDescription || 'N/A'}</div>
+                    </div>
 
-                ${adminNotes ? `
-                <div class="section">
-                    <h3>Admin Notes:</h3>
-                    <p>${adminNotes}</p>
+                    ${imagesHtml}
+
+                    ${adminNotes ? `
+                    <div style="margin: 25px 0;">
+                        <div class="info-label">Admin Notes:</div>
+                        <div style="color: #333333; margin-top: 8px; padding: 12px; background-color: #f8f9fa; border-radius: 6px;">
+                            ${adminNotes}
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <div style="text-align: center; margin: 30px 0;">
+                        <p style="color: #666666; font-size: 14px;">
+                            Thank you for contributing to the Eggception community! 🥚
+                        </p>
+                    </div>
                 </div>
-                ` : ''}
 
                 <div class="footer">
                     <p>Eggception Team</p>
+                    <p>This is an automated message, please do not reply to this email.</p>
                 </div>
             </div>
         </body>
         </html>
       `;
     } else if (action === 'reject') {
-      emailSubject = `Preset Rejected - Eggception`;
+      emailSubject = `Your Preset Needs Changes - Eggception`;
       
       emailHtml = `
         <!DOCTYPE html>
@@ -198,8 +245,8 @@ app.post('/api/responseemail', async (req, res) => {
         <head>
             <style>
                 body { 
-                    font-family: Arial, sans-serif; 
-                    line-height: 1.4; 
+                    font-family: 'Arial', sans-serif; 
+                    line-height: 1.6; 
                     color: #000000; 
                     background-color: #ffffff; 
                     margin: 0; 
@@ -208,55 +255,84 @@ app.post('/api/responseemail', async (req, res) => {
                 .container { 
                     max-width: 600px; 
                     margin: 0 auto; 
-                    padding: 20px; 
+                    padding: 30px 20px; 
                     background-color: #ffffff; 
                 }
-                h1, h2, h3 { 
+                .header { 
+                    text-align: center; 
+                    margin-bottom: 30px; 
+                    padding-bottom: 20px;
+                    border-bottom: 1px solid #f0f0f0;
+                }
+                .title { 
                     color: #000000; 
+                    font-size: 24px; 
+                    font-weight: bold; 
                     margin: 0 0 10px 0;
                 }
-                p { 
-                    margin: 0 0 10px 0; 
+                .content {
+                    margin: 25px 0;
                 }
-                .header { 
-                    padding: 20px 0; 
-                    text-align: center; 
-                    border-bottom: 2px solid #000000; 
-                    margin-bottom: 20px; 
+                .rejection-info {
+                    background-color: #f8d7da;
+                    color: #721c24;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                    border-left: 4px solid #dc3545;
                 }
-                .section { 
-                    margin: 15px 0; 
-                    padding: 0; 
+                .info-label {
+                    font-weight: 600;
+                    color: #000000;
+                    margin-bottom: 8px;
                 }
                 .footer { 
-                    margin-top: 20px; 
-                    padding-top: 15px; 
-                    border-top: 1px solid #000000; 
+                    margin-top: 30px; 
+                    padding-top: 20px; 
+                    border-top: 1px solid #f0f0f0; 
                     font-size: 12px; 
                     text-align: center;
+                    color: #666666;
                 }
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>Preset Rejected</h1>
+                    <div class="title">Preset Review Required</div>
                 </div>
                 
-                <div class="section">
-                    <h2>Your preset needs changes</h2>
-                    <p><strong>Reason:</strong> ${rejectionReason || ''}</p>
-                </div>
+                <div class="content">
+                    <div class="rejection-info">
+                        <strong>Attention Required:</strong> Your preset needs some changes before it can be published.
+                    </div>
 
-                ${adminNotes ? `
-                <div class="section">
-                    <h3>Admin Notes:</h3>
-                    <p>${adminNotes}</p>
+                    <div style="margin: 25px 0;">
+                        <div class="info-label">Reason for Rejection:</div>
+                        <div style="color: #333333; margin-top: 8px; padding: 15px; background-color: #f8f9fa; border-radius: 6px;">
+                            ${rejectionReason || 'No specific reason provided'}
+                        </div>
+                    </div>
+
+                    ${adminNotes ? `
+                    <div style="margin: 25px 0;">
+                        <div class="info-label">Admin Notes:</div>
+                        <div style="color: #333333; margin-top: 8px; padding: 12px; background-color: #f8f9fa; border-radius: 6px;">
+                            ${adminNotes}
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <div style="text-align: center; margin: 30px 0;">
+                        <p style="color: #666666; font-size: 14px;">
+                            Please make the necessary changes and resubmit your preset.
+                        </p>
+                    </div>
                 </div>
-                ` : ''}
 
                 <div class="footer">
                     <p>Eggception Team</p>
+                    <p>This is an automated message, please do not reply to this email.</p>
                 </div>
             </div>
         </body>
