@@ -16,7 +16,8 @@ import {
   Tag,
   Loader2,
   MessageSquare,
-  Layers
+  Layers,
+  Trash2
 } from "lucide-react";
 import { supabase } from '../../../utils/supabaseClient';
 
@@ -50,11 +51,13 @@ const OwnCreations = () => {
   const [imageLoadingStates, setImageLoadingStates] = useState<Record<string, boolean>>({});
   const [selectedImage, setSelectedImage] = useState<Creation | null>(null);
   const [sourceFilter, setSourceFilter] = useState<'all' | 'image_url' | 'generated_images'>('all');
-  const [displayedCount, setDisplayedCount] = useState(100); // Initial display count
+  const [displayedCount, setDisplayedCount] = useState(100);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   
-  const itemsPerBatch = 100; // Images to display per batch (5 rows × 20 images)
+  const itemsPerBatch = 100;
 
   const fetchGeneratedImagesFromSupabase = async (offset = 0, batchSize = 50): Promise<{ creations: Creation[], hasMore: boolean }> => {
     try {
@@ -73,8 +76,8 @@ const OwnCreations = () => {
         return { creations: [], hasMore: false };
       }
 
-              const collectedCreations: Creation[] = [];
-      const seenImageUrls = new Set<string>(); // Track seen image URLs to prevent duplicates
+      const collectedCreations: Creation[] = [];
+      const seenImageUrls = new Set<string>();
 
       for (const creation of data) {
         const isGuest = !creation.user_uid || creation.user_uid === null;
@@ -91,8 +94,6 @@ const OwnCreations = () => {
                   imageUrls = parsed.filter(url => typeof url === 'string' && url.length > 0);
                 }
               } catch (e) {
-                console.error('Error parsing image_url as JSON:', e);
-
                 if (creation.image_url.startsWith('http') || creation.image_url.startsWith('data:')) {
                   imageUrls = [creation.image_url];
                 }
@@ -104,14 +105,14 @@ const OwnCreations = () => {
             imageUrls.forEach((imageUrl: string, index: number) => {
               if (imageUrl && typeof imageUrl === 'string' && !seenImageUrls.has(imageUrl)) {
                 seenImageUrls.add(imageUrl);
-                          collectedCreations.push({
+                collectedCreations.push({
                   id: `${creationId}-image_url-${index}`,
                   title: '',
                   image_url: imageUrl,
                   prompt: '', 
                   source: 'image_url',
                   creator_id: creation.user_uid || 'guest',
-                            creator: {
+                  creator: {
                     id: creation.user_uid || 'guest',
                     name: isGuest ? 'Guest User' : 'Registered User',
                     avatar_url: null
@@ -147,7 +148,6 @@ const OwnCreations = () => {
                   generatedImagesData = [parsed];
                 }
               } catch (e) {
-                console.error('Error parsing generated_images as JSON:', e);
                 if (creation.generated_images.startsWith('http') || creation.generated_images.startsWith('data:')) {
                   generatedImagesData = [{ url: creation.generated_images, prompt: 'Generated image' }];
                 }
@@ -157,7 +157,7 @@ const OwnCreations = () => {
                 generatedImagesData = creation.generated_images.generated_images;
               } else if (Array.isArray(creation.generated_images)) {
                 generatedImagesData = creation.generated_images;
-            } else {
+              } else {
                 generatedImagesData = [creation.generated_images];
               }
             }
@@ -206,8 +206,7 @@ const OwnCreations = () => {
     
     setLoadingMore(true);
     try {
-      // Calculate offset based on how many database records we've fetched
-      const dbRecordsFetched = Math.floor(creations.length / 5); // Rough estimate
+      const dbRecordsFetched = Math.floor(creations.length / 5);
       const batchSize = 50;
       
       const result = await fetchGeneratedImagesFromSupabase(dbRecordsFetched, batchSize);
@@ -252,7 +251,6 @@ const OwnCreations = () => {
         const batchSize = 50;
         let hasMoreData = true;
         
-        // Fetch batches until we have enough processed images (at least itemsPerBatch)
         while (hasMoreData && allFetchedCreations.length < itemsPerBatch) {
           const result = await fetchGeneratedImagesFromSupabase(offset, batchSize);
           const creations = result.creations;
@@ -339,22 +337,63 @@ const OwnCreations = () => {
       showNotification('error', 'Failed to refresh creations');
     }
   };
+const handleDeleteAsset = async () => {
+  if (!selectedImage) return;
+  
+  setDeleting(true);
+  try {
+    // Extract the complete original creation ID from the composite ID
+    const idParts = selectedImage.id.split('-');
+    const originalId = idParts.slice(0, -2).join('-');
+    
+    console.log('Deleting asset with ID:', originalId, 'Selected image ID:', selectedImage.id);
+    
+    // Delete from Supabase database
+    const { error } = await supabase
+      .from('user_own_creations')
+      .delete()
+      .eq('id', originalId);
 
+    if (error) {
+      throw error;
+    }
+
+    console.log('Before deletion - Creations count:', creations.length);
+    
+    setCreations(prev => {
+      const filtered = prev.filter(creation => {
+        const creationOriginalId = creation.id.split('-').slice(0, -2).join('-');
+        return creationOriginalId !== originalId;
+      });
+      console.log('After deletion - Creations count:', filtered.length);
+      return filtered;
+    });
+    
+    showNotification('success', 'Asset deleted successfully');
+    setSelectedImage(null);
+    setShowDeleteConfirm(false);
+  } catch (error) {
+    console.error('Error deleting asset:', error);
+    showNotification('error', 'Failed to delete asset');
+  } finally {
+    setDeleting(false);
+  }
+};
   const filteredCreations = useMemo(() => {
     return creations
       .filter(creation => {
-      const title = creation.title || '';
+        const title = creation.title || '';
         const prompt = creation.prompt || '';
-      const tags = Array.isArray(creation.tags) ? creation.tags : [];
-      
-      const matchesSearch = 
-        title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        const tags = Array.isArray(creation.tags) ? creation.tags : [];
+        
+        const matchesSearch = 
+          title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           prompt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      const matchesTag = 
-        tagFilter === 'all' || 
-        tags.includes(tagFilter);
+          tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+        
+        const matchesTag = 
+          tagFilter === 'all' || 
+          tags.includes(tagFilter);
 
         const matchesSource = 
           sourceFilter === 'all' || 
@@ -370,10 +409,8 @@ const OwnCreations = () => {
   
   const handleLoadMore = async () => {
     if (filteredCreations.length > displayedCount) {
-      // Show more from already loaded creations
       setDisplayedCount(prev => Math.min(prev + itemsPerBatch, filteredCreations.length));
     } else if (hasMore && !loadingMore) {
-      // Fetch more from database
       await fetchMoreCreations();
       setDisplayedCount(prev => prev + itemsPerBatch);
     }
@@ -383,7 +420,6 @@ const OwnCreations = () => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 5000);
   };
-
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString("en-US", {
@@ -472,7 +508,6 @@ const OwnCreations = () => {
     return creation.source === 'generated_images' && creation.prompt && creation.prompt.trim().length > 0;
   };
 
-  // Safe Image Component with Next.js Image
   const SafeImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
     const [imgSrc, setImgSrc] = useState(src);
     const [isLoading, setIsLoading] = useState(true);
@@ -530,6 +565,40 @@ const OwnCreations = () => {
           </button>
         </div>
       )}
+      
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Confirm Deletion</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete this asset? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium rounded-lg border border-gray-300 hover:border-gray-400 transition-colors"
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAsset}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <Loader2 className="animate-spin" size={16} />
+                ) : (
+                  <Trash2 size={16} />
+                )}
+                {deleting ? 'Deleting...' : 'Delete Asset'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {selectedImage && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
@@ -567,16 +636,30 @@ const OwnCreations = () => {
                 <div>
                   <span className="font-medium">Created:</span> {formatDate(selectedImage.created_at)}
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDownload(selectedImage.id);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg"
-                >
-                  <Download size={16} />
-                  Download
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownload(selectedImage.id);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg transition-colors"
+                  >
+                    <Download size={16} />
+                    Download
+                  </button>
+                  
+                  {/* DELETE BUTTON - ALWAYS VISIBLE NOW */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowDeleteConfirm(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+                  >
+                    <Trash2 size={16} />
+                    Delete Asset
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -635,10 +718,6 @@ const OwnCreations = () => {
               }}
             />
           </div>
-          
-    
-
-       
         </div>
       </div>
 
@@ -697,7 +776,6 @@ const OwnCreations = () => {
                     </button>
                   </div>
                   
-                  {/* Show prompt button only for generated_images format */}
                   {hasValidPrompt(creation) && (
                     <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
@@ -727,7 +805,7 @@ const OwnCreations = () => {
           
           {hasMoreToShow && (
             <div className="flex justify-center mt-6">
-                <button
+              <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
                 className="px-6 py-3 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -743,8 +821,8 @@ const OwnCreations = () => {
                     <ChevronDown size={18} />
                   </>
                 )}
-                </button>
-              </div>
+              </button>
+            </div>
           )}
           {!hasMoreToShow && filteredCreations.length > 0 && (
             <div className="text-center mt-6 text-gray-500 text-sm">
