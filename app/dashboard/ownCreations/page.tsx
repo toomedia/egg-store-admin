@@ -636,25 +636,7 @@ const OwnCreations = () => {
             />
           </div>
           
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Tag className="text-gray-400" size={16} />
-            </div>
-            <select
-              className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
-              value={tagFilter}
-              onChange={(e) => {
-                setTagFilter(e.target.value);
-                setDisplayedCount(itemsPerBatch);
-              }}
-            >
-              <option value="all">All Tags</option>
-              {allTags.map((tag) => (
-                <option key={tag} value={tag}>{tag}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-3 text-gray-400" size={16} />
-          </div>
+    
 
        
         </div>
