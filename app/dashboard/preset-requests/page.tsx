@@ -1403,18 +1403,7 @@ const handleApprovePreset = async (presetId: string) => {
                             <Edit className="mr-1" size={14} />
                             Edit
                           </button>
-                          <button 
-                            onClick={() => handleDelete(item.id)} 
-                            disabled={deletingId === item.id}
-                            className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-sm font-medium flex items-center disabled:opacity-50"
-                          >
-                            {deletingId === item.id ? (
-                              <Loader2 className="mr-1 animate-spin" size={14} />
-                            ) : (
-                              <Trash2 className="mr-1" size={14} />
-                            )}
-                            {deletingId === item.id ? 'Deleting...' : 'Delete'}
-                          </button>
+                    
                         </div>
 
                         <div className="bg-gray-100 px-3 py-2 rounded-lg text-center">
