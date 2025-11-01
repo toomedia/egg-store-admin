@@ -19,7 +19,8 @@ import {
   Layers,
   Trash2,
   PlusCircle,
-  Grid
+  Grid,
+  Globe
 } from "lucide-react";
 import { supabase } from '../../../utils/supabaseClient';
 
@@ -77,6 +78,7 @@ const OwnCreations = () => {
     descDe: '',
     selectedEggs: []
   });
+  const [makingLive, setMakingLive] = useState(false);
 
   const itemsPerBatch = 100;
 
@@ -426,6 +428,7 @@ const OwnCreations = () => {
     setSelectedForPreset([]);
   };
 
+  // Create preset with draft status
   const createPresetFromSelection = async () => {
     if (selectedForPreset.length === 0) {
       showNotification('error', 'Please select at least one image for the preset');
@@ -454,6 +457,7 @@ const OwnCreations = () => {
         preset_size_json: { value: selectedEggs.length * 2, price: 0.99 }, // For matching pairs
         preset_price: '0.99',
         preset_images: imageUrls,
+        preset_status: 'draft',
         created_at: new Date().toISOString()
       };
 
@@ -466,11 +470,11 @@ const OwnCreations = () => {
         throw error;
       }
 
-      showNotification('success', 'Preset created successfully!');
+      showNotification('success', 'Preset created successfully as draft!');
       setPresetCreationMode(false);
       setSelectedForPreset([]);
       
-      // Redirect to presets page or show success message
+      // Optionally redirect to presets page
       setTimeout(() => {
         window.location.href = '/dashboard/presets';
       }, 2000);
@@ -478,6 +482,73 @@ const OwnCreations = () => {
     } catch (error) {
       console.error('Error creating preset:', error);
       showNotification('error', 'Failed to create preset');
+    }
+  };
+
+  // Make Live functionality - Create preset with approved status
+  const handleMakeLive = async () => {
+    if (selectedForPreset.length === 0) {
+      showNotification('error', 'Please select at least one image for the preset');
+      return;
+    }
+
+    if (!presetFormData.titleEn || !presetFormData.titleDe) {
+      showNotification('error', 'Please provide both English and German titles');
+      return;
+    }
+
+    setMakingLive(true);
+    const selectedEggs = creations.filter(creation => selectedForPreset.includes(creation.id));
+    
+    try {
+      const imageUrls = selectedEggs.map(egg => egg.image_url);
+      
+      // Get current user for created_by field
+      const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = user?.id;
+
+      const presetData = {
+        preset_name: {
+          en_name: presetFormData.titleEn,
+          de_name: presetFormData.titleDe,
+        },
+        preset_desc: {
+          en_desc: presetFormData.descEn,
+          de_desc: presetFormData.descDe,
+        },
+        preset_size_json: { value: selectedEggs.length * 2, price: 0.99 },
+        preset_price: '0.99',
+        preset_images: imageUrls,
+        preset_status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: currentUserId,
+        created_at: new Date().toISOString(),
+        created_by: currentUserId
+      };
+
+      const { data, error } = await supabase
+        .from('presets')
+        .insert(presetData)
+        .select('*');
+
+      if (error) {
+        throw error;
+      }
+
+      showNotification('success', 'Preset created and published successfully!');
+      setPresetCreationMode(false);
+      setSelectedForPreset([]);
+      
+      // Redirect to presets page
+      setTimeout(() => {
+        window.location.href = '/dashboard/presets';
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error creating preset:', error);
+      showNotification('error', 'Failed to create and publish preset');
+    } finally {
+      setMakingLive(false);
     }
   };
 
@@ -798,7 +869,19 @@ const OwnCreations = () => {
                   disabled={selectedForPreset.length === 0}
                 >
                   <PlusCircle className="mr-2" size={18} />
-                  Create Preset ({selectedForPreset.length})
+                  Create Draft ({selectedForPreset.length})
+                </button>
+                <button 
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg flex items-center disabled:opacity-50"
+                  onClick={handleMakeLive}
+                  disabled={selectedForPreset.length === 0 || makingLive}
+                >
+                  {makingLive ? (
+                    <Loader2 className="mr-2 animate-spin" size={18} />
+                  ) : (
+                    <Globe className="mr-2" size={18} />
+                  )}
+                  {makingLive ? 'Publishing...' : 'Make Live'}
                 </button>
               </>
             ) : (
@@ -883,6 +966,10 @@ const OwnCreations = () => {
               <CheckCircle className="inline mr-1" size={16} />
               Selected {selectedForPreset.length} eggs for preset • 
               Will create {selectedForPreset.length * 2} cards (matching pairs)
+            </div>
+            <div className="mt-2 text-xs text-gray-500">
+              <strong>Create Draft:</strong> Creates preset as draft for later review • 
+              <strong> Make Live:</strong> Publishes preset immediately with approved status
             </div>
           </div>
         )}

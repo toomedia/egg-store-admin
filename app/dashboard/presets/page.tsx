@@ -16,6 +16,7 @@ import {
   ChevronDown,
   X,
   Check,
+  Globe,
   Loader2,
   User,
   Mail,
@@ -298,7 +299,7 @@ const Page = () => {
   useEffect(() => {
     let filtered = preset;
     
-// Apply search filter
+    // Apply search filter
     if (searchQuery) {
       filtered = filtered.filter(item => 
         item.preset_name?.en_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -762,54 +763,28 @@ const getStatusBadge = (status: string) => {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    setIsLoading(true);
+  // Function to handle "Make Live" button click for both create and edit
+  const handleMakeLive = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // First validate the form
     const activeImages = formData.images.filter(img => !img.markedForDeletion);
     
     if (activeImages.length === 0) {
       alert("Please upload at least one image.");
-      setIsLoading(false);
       return;
     }
 
     const requiredUniqueImages = Math.ceil(parseInt(String(formData.size.value)) / 2);
     if (activeImages.length !== requiredUniqueImages) {
       alert(`For a matching pairs game, you need exactly ${requiredUniqueImages} unique images (which will be duplicated to create ${formData.size.value} cards). Currently you have ${activeImages.length} images.`);
-      setIsLoading(false);
       return;
     }
 
+    setIsLoading(true);
+
     try {
-      const imagesToDelete = formData.images.filter(
-        img => img.isExisting && img.markedForDeletion
-      );
-      
-      console.log("Images marked for deletion:", imagesToDelete);
-      
-      if (imagesToDelete.length > 0) {
-        const imagePaths = imagesToDelete.map(img => {
-          if (!img.originalUrl) return null;
-          const urlParts = img.originalUrl.split('/');
-          return `presets/${urlParts[urlParts.length - 1]}`;
-        }).filter(Boolean) as string[];
-        
-        console.log("Deleting image paths from storage:", imagePaths);
-        
-        if (imagePaths.length > 0) {
-          const { error: storageError } = await supabase.storage
-            .from('presets')
-            .remove(imagePaths);
-            
-          if (storageError) {
-            console.error("Error deleting images from storage:", storageError);
-          } else {
-            console.log("Successfully deleted images from storage");
-          }
-        }
-      }
-      
+      // Upload images and get URLs
       const uploadedImageUrls: string[] = [];
 
       for (let image of formData.images) {
@@ -847,112 +822,106 @@ const getStatusBadge = (status: string) => {
 
       const finalImageUrls = uploadedImageUrls;
 
+      // Clean up object URLs
       formData.images.forEach(img => {
         if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
       });
 
-      let data: any = null;
-      let error: any = null;
-      
+      // Get current user info for created_by field
+      const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = user?.id;
+      const adminUserId = searchParams.get('admin_user_id'); // Get admin user ID from URL if present
+
+      // Create preset data with approved status for immediate publishing
+      const presetData = {
+        preset_name: {
+          en_name: formData.titleEn,
+          de_name: formData.titleDe,
+        },
+        preset_desc: {
+          en_desc: formData.descEn,
+          de_desc: formData.descDe,
+        },
+        preset_size_json: formData.size,
+        preset_price: formData.price,
+        preset_images: finalImageUrls,
+        preset_status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: adminUserId || currentUserId, 
+        created_at: new Date().toISOString(),
+        created_by: currentUserId // Add created_by field
+      };
+
       if (editingId) {
-        const { data: existingPreset, error: checkError } = await supabase
+        // Update existing preset
+        const { data, error } = await supabase
           .from("presets")
-          .select("id")
+          .update(presetData)
           .eq("id", editingId)
-          .single();
-        
-        if (checkError || !existingPreset) {
-          error = { message: 'Preset not found. It may have been deleted.' };
-        } else {
-          const updateData = {
-            preset_name: {
-              en_name: formData.titleEn,
-              de_name: formData.titleDe,
-            },
-            preset_desc: {
-              en_desc: formData.descEn,
-              de_desc: formData.descDe,
-            },
-            preset_size_json: formData.size,
-            preset_price: formData.price,
-            preset_images: finalImageUrls,
-          };
-
-          const { data: updateDataResult, error: updateError } = await supabase
-            .from("presets")
-            .update(updateData)
-            .eq('id', editingId)
-            .select("*");
-          
-          if (updateError) {
-            error = updateError;
-          } else if (!updateDataResult || updateDataResult.length === 0) {
-            error = { message: 'Preset not found or no changes made' };
-          } else {
-            data = updateDataResult[0];
-          }
-        }
-      } else {
-        const insertData = {
-          preset_name: {
-            en_name: formData.titleEn,
-            de_name: formData.titleDe,
-          },
-          preset_desc: {
-            en_desc: formData.descEn,
-            de_desc: formData.descDe,
-          },
-          preset_size_json: formData.size,
-          preset_price: formData.price,
-          preset_images: finalImageUrls,
-          created_at: new Date().toISOString()
-        };
-
-        const { data: insertDataResult, error: insertError } = await supabase
-          .from("presets")
-          .insert(insertData)
           .select("*");
-        
-        if (insertError) {
-          error = insertError;
-        } else if (!insertDataResult || insertDataResult.length === 0) {
-          error = { message: 'Failed to create preset' };
-        } else {
-          data = insertDataResult[0];
+
+        if (error) {
+          console.error("Database error:", error);
+          alert(`Failed to update preset: ${error.message}`);
+          setIsLoading(false);
+          return;
         }
-      }
 
-      if (error) {
-        console.error("Database error:", error);
-        alert(`Failed to ${editingId ? 'update' : 'create'} preset: ${error.message}`);
-        setIsLoading(false);
-        return;
-      }
-
-      alert(editingId ? "Preset updated successfully!" : "Preset created successfully!");
-      
-      let updatedPresets;
-      if (editingId) {
-        updatedPresets = preset.map(item => 
-          item.id === editingId ? { ...item, ...data } : item
+        alert("Preset updated and published successfully!");
+        
+        // Update local state and IndexedDB
+        const updatedPresets = preset.map(item => 
+          item.id === editingId ? data[0] : item
         );
         setPreset(updatedPresets);
+        
+        try {
+          await setItem(ALL_PRESETS_KEY, updatedPresets);
+        } catch (indexedDBError) {
+          console.error("Error updating IndexedDB:", indexedDBError);
+        }
       } else {
-        updatedPresets = [...preset, data];
+        // Create new preset
+        const { data, error } = await supabase
+          .from("presets")
+          .insert(presetData)
+          .select("*");
+
+        if (error) {
+          console.error("Database error:", error);
+          alert(`Failed to create preset: ${error.message}`);
+          setIsLoading(false);
+          return;
+        }
+
+        alert("Preset created and published successfully!");
+        
+        // Update local state and IndexedDB
+        const updatedPresets = [...preset, data[0]];
         setPreset(updatedPresets);
+        
+        try {
+          await setItem(ALL_PRESETS_KEY, updatedPresets);
+        } catch (indexedDBError) {
+          console.error("Error updating IndexedDB:", indexedDBError);
+        }
       }
       
-      try {
-        await setItem(ALL_PRESETS_KEY, updatedPresets);
-      } catch (indexedDBError) {
-        console.error("Error updating IndexedDB:", indexedDBError);
-      }
-      
+      // Reset form and go back to list view
       setCurrentView("list");
       setEditingId(null);
+      setFormData({
+        titleEn: '', 
+        titleDe: '', 
+        descEn: '', 
+        descDe: '', 
+        size: { value: '', price: 0 }, 
+        price: '', 
+        images: [] 
+      });
 
     } catch (err) {
-      console.error("Unexpected error in handleSubmit:", err);
+      console.error("Unexpected error in handleMakeLive:", err);
       formData.images.forEach(img => {
         if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
       });
@@ -960,6 +929,32 @@ const getStatusBadge = (status: string) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Modified handleSubmit - Now only validates and shows message, doesn't save to database
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const activeImages = formData.images.filter(img => !img.markedForDeletion);
+    
+    if (activeImages.length === 0) {
+      alert("Please upload at least one image.");
+      return;
+    }
+
+    const requiredUniqueImages = Math.ceil(parseInt(String(formData.size.value)) / 2);
+    if (activeImages.length !== requiredUniqueImages) {
+      alert(`For a matching pairs game, you need exactly ${requiredUniqueImages} unique images (which will be duplicated to create ${formData.size.value} cards). Currently you have ${activeImages.length} images.`);
+      return;
+    }
+
+    // Show message that preset is ready but not saved
+    alert("Preset is ready! Click 'Make Live' to publish it to the presets.");
+    
+    // Clean up object URLs if there are any file objects
+    formData.images.forEach(img => {
+      if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -1243,7 +1238,7 @@ const getStatusBadge = (status: string) => {
           <p className="text-gray-600">
             {editingId 
               ? 'Update the preset information below.' 
-              : 'Fill out the form below to create a new egg card preset.'
+              : 'Fill out the form below to create a new egg card preset. Use "Make Live" to publish it.'
             }
           </p>
         </div>
@@ -1526,6 +1521,22 @@ const getStatusBadge = (status: string) => {
             >
               Cancel
             </button>
+
+            {/* Make Live Button - For both new and edit modes */}
+            <button 
+              type="button"
+              onClick={handleMakeLive}
+              disabled={isLoading || (!!formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2))}
+              className="px-4 py-2 border border-transparent rounded-md text-sm font-medium bg-green-600 hover:bg-green-700 text-white cursor-pointer transition-colors flex items-center justify-center disabled:opacity-50"
+            >
+              {isLoading ? (
+                <Loader2 className="mr-2 animate-spin" size={16} />
+              ) : (
+                <Globe className="mr-2" size={16} />
+              )}
+              {isLoading ? 'Publishing...' : (editingId ? 'Update & Make Live' : 'Make Live')}
+            </button>
+
             <button 
               type="submit"
               disabled={isLoading || (!!formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2))}
@@ -1679,7 +1690,7 @@ const getStatusBadge = (status: string) => {
                         <p className="text-lg font-bold">€{item.preset_price || '0.00'}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 flex items-center">
+                        <p className="text-xs text-gray-500 mb-1 flex items-center">
                           <Calendar className="mr-1" size={12} />
                           Created
                         </p>
