@@ -17,7 +17,9 @@ import {
   Loader2,
   MessageSquare,
   Layers,
-  Trash2
+  Trash2,
+  PlusCircle,
+  Grid
 } from "lucide-react";
 import { supabase } from '../../../utils/supabaseClient';
 
@@ -40,6 +42,14 @@ interface Creation {
   updated_at: string;
 }
 
+interface PresetCreationData {
+  titleEn: string;
+  titleDe: string;
+  descEn: string;
+  descDe: string;
+  selectedEggs: Creation[];
+}
+
 const OwnCreations = () => {
   const [creations, setCreations] = useState<Creation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +67,17 @@ const OwnCreations = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   
+  // Preset creation state
+  const [presetCreationMode, setPresetCreationMode] = useState(false);
+  const [selectedForPreset, setSelectedForPreset] = useState<string[]>([]);
+  const [presetFormData, setPresetFormData] = useState<PresetCreationData>({
+    titleEn: '',
+    titleDe: '',
+    descEn: '',
+    descDe: '',
+    selectedEggs: []
+  });
+
   const itemsPerBatch = 100;
 
   const fetchGeneratedImagesFromSupabase = async (offset = 0, batchSize = 50): Promise<{ creations: Creation[], hasMore: boolean }> => {
@@ -337,48 +358,129 @@ const OwnCreations = () => {
       showNotification('error', 'Failed to refresh creations');
     }
   };
-const handleDeleteAsset = async () => {
-  if (!selectedImage) return;
-  
-  setDeleting(true);
-  try {
-    // Extract the complete original creation ID from the composite ID
-    const idParts = selectedImage.id.split('-');
-    const originalId = idParts.slice(0, -2).join('-');
-    
-    console.log('Deleting asset with ID:', originalId, 'Selected image ID:', selectedImage.id);
-    
-    // Delete from Supabase database
-    const { error } = await supabase
-      .from('user_own_creations')
-      .delete()
-      .eq('id', originalId);
 
-    if (error) {
-      throw error;
+  const handleDeleteAsset = async () => {
+    if (!selectedImage) return;
+    
+    setDeleting(true);
+    try {
+      const idParts = selectedImage.id.split('-');
+      const originalId = idParts.slice(0, -2).join('-');
+      
+      console.log('Deleting asset with ID:', originalId, 'Selected image ID:', selectedImage.id);
+      
+      const { error } = await supabase
+        .from('user_own_creations')
+        .delete()
+        .eq('id', originalId);
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('Before deletion - Creations count:', creations.length);
+      
+      setCreations(prev => {
+        const filtered = prev.filter(creation => {
+          const creationOriginalId = creation.id.split('-').slice(0, -2).join('-');
+          return creationOriginalId !== originalId;
+        });
+        console.log('After deletion - Creations count:', filtered.length);
+        return filtered;
+      });
+      
+      showNotification('success', 'Asset deleted successfully');
+      setSelectedImage(null);
+      setShowDeleteConfirm(false);
+    } catch (error) {
+      console.error('Error deleting asset:', error);
+      showNotification('error', 'Failed to delete asset');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Preset creation functions
+  const togglePresetSelection = (creationId: string) => {
+    setSelectedForPreset(prev => 
+      prev.includes(creationId) 
+        ? prev.filter(id => id !== creationId)
+        : [...prev, creationId]
+    );
+  };
+
+  const startPresetCreation = () => {
+    setPresetCreationMode(true);
+    setSelectedForPreset([]);
+    setPresetFormData({
+      titleEn: '',
+      titleDe: '',
+      descEn: '',
+      descDe: '',
+      selectedEggs: []
+    });
+  };
+
+  const cancelPresetCreation = () => {
+    setPresetCreationMode(false);
+    setSelectedForPreset([]);
+  };
+
+  const createPresetFromSelection = async () => {
+    if (selectedForPreset.length === 0) {
+      showNotification('error', 'Please select at least one image for the preset');
+      return;
     }
 
-    console.log('Before deletion - Creations count:', creations.length);
+    if (!presetFormData.titleEn || !presetFormData.titleDe) {
+      showNotification('error', 'Please provide both English and German titles');
+      return;
+    }
+
+    const selectedEggs = creations.filter(creation => selectedForPreset.includes(creation.id));
     
-    setCreations(prev => {
-      const filtered = prev.filter(creation => {
-        const creationOriginalId = creation.id.split('-').slice(0, -2).join('-');
-        return creationOriginalId !== originalId;
-      });
-      console.log('After deletion - Creations count:', filtered.length);
-      return filtered;
-    });
-    
-    showNotification('success', 'Asset deleted successfully');
-    setSelectedImage(null);
-    setShowDeleteConfirm(false);
-  } catch (error) {
-    console.error('Error deleting asset:', error);
-    showNotification('error', 'Failed to delete asset');
-  } finally {
-    setDeleting(false);
-  }
-};
+    try {
+      const imageUrls = selectedEggs.map(egg => egg.image_url);
+      
+      const presetData = {
+        preset_name: {
+          en_name: presetFormData.titleEn,
+          de_name: presetFormData.titleDe,
+        },
+        preset_desc: {
+          en_desc: presetFormData.descEn,
+          de_desc: presetFormData.descDe,
+        },
+        preset_size_json: { value: selectedEggs.length * 2, price: 0.99 }, // For matching pairs
+        preset_price: '0.99',
+        preset_images: imageUrls,
+        created_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('presets')
+        .insert(presetData)
+        .select('*');
+
+      if (error) {
+        throw error;
+      }
+
+      showNotification('success', 'Preset created successfully!');
+      setPresetCreationMode(false);
+      setSelectedForPreset([]);
+      
+      // Redirect to presets page or show success message
+      setTimeout(() => {
+        window.location.href = '/dashboard/presets';
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error creating preset:', error);
+      showNotification('error', 'Failed to create preset');
+    }
+  };
+
   const filteredCreations = useMemo(() => {
     return creations
       .filter(creation => {
@@ -648,7 +750,6 @@ const handleDeleteAsset = async () => {
                     Download
                   </button>
                   
-                  {/* DELETE BUTTON - ALWAYS VISIBLE NOW */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -682,23 +783,109 @@ const handleDeleteAsset = async () => {
             )}
           </div>
           <div className="flex gap-3">
-            <button 
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              onClick={refreshCreations}
-              disabled={loading}
-            >
-              <RefreshCw className={loading ? "animate-spin" : ""} size={18} />
-              Refresh
-            </button>
-            <button 
-              className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
-              onClick={handleDownloadAll}
-            >
-              <Download className="mr-2" size={18} />
-              Download All
-            </button>
+            {presetCreationMode ? (
+              <>
+                <button 
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  onClick={cancelPresetCreation}
+                >
+                  <XCircle size={18} />
+                  Cancel Preset
+                </button>
+                <button 
+                  className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
+                  onClick={createPresetFromSelection}
+                  disabled={selectedForPreset.length === 0}
+                >
+                  <PlusCircle className="mr-2" size={18} />
+                  Create Preset ({selectedForPreset.length})
+                </button>
+              </>
+            ) : (
+              <>
+                <button 
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  onClick={refreshCreations}
+                  disabled={loading}
+                >
+                  <RefreshCw className={loading ? "animate-spin" : ""} size={18} />
+                  Refresh
+                </button>
+                <button 
+                  className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
+                  onClick={startPresetCreation}
+                >
+                  <PlusCircle className="mr-2" size={18} />
+                  Create Preset
+                </button>
+                <button 
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg flex items-center"
+                  onClick={handleDownloadAll}
+                >
+                  <Download className="mr-2" size={18} />
+                  Download All
+                </button>
+              </>
+            )}
           </div>
         </div>
+
+        {/* Preset Creation Form */}
+        {presetCreationMode && (
+          <div className="mt-6 p-4 bg-white ">
+            <h3 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+              <Grid className="mr-2" size={20} />
+              Create New Preset from Selected Eggs
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Preset Title (English)</label>
+                <input
+                  type="text"
+                  value={presetFormData.titleEn}
+                  onChange={(e) => setPresetFormData(prev => ({ ...prev, titleEn: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
+                  placeholder="Spring Flowers Collection"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Preset Title (German)</label>
+                <input
+                  type="text"
+                  value={presetFormData.titleDe}
+                  onChange={(e) => setPresetFormData(prev => ({ ...prev, titleDe: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
+                  placeholder="Frühlingsblumen Kollektion"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description (English) - Optional</label>
+                <textarea
+                  value={presetFormData.descEn}
+                  onChange={(e) => setPresetFormData(prev => ({ ...prev, descEn: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
+                  placeholder="A beautiful collection of spring flower designs"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description (German) - Optional</label>
+                <textarea
+                  value={presetFormData.descDe}
+                  onChange={(e) => setPresetFormData(prev => ({ ...prev, descDe: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
+                  placeholder="Eine wunderschöne Kollektion von Frühlingsblumen-Designs"
+                />
+              </div>
+            </div>
+            <div className="mt-3 text-sm text-gray-700">
+              <CheckCircle className="inline mr-1" size={16} />
+              Selected {selectedForPreset.length} eggs for preset • 
+              Will create {selectedForPreset.length * 2} cards (matching pairs)
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -743,8 +930,18 @@ const handleDeleteAsset = async () => {
             {currentItems.map((creation) => (
               <div 
                 key={creation.id} 
-                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer col-span-1"
-                onClick={() => setSelectedImage(creation)}
+                className={`bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer col-span-1 ${
+                  presetCreationMode && selectedForPreset.includes(creation.id) 
+                    ? 'ring-2 ring-[#e6d281] ring-offset-2' 
+                    : ''
+                }`}
+                onClick={() => {
+                  if (presetCreationMode) {
+                    togglePresetSelection(creation.id);
+                  } else {
+                    setSelectedImage(creation);
+                  }
+                }}
               >
                 <div className="relative aspect-square">
                   {imageLoadingStates[creation.id] !== false && (
@@ -763,32 +960,45 @@ const handleDeleteAsset = async () => {
                     }}
                     unoptimized
                   />
-                  <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                    <button 
-                      className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDownload(creation.id);
-                      }}
-                      title="Download"
-                    >
-                      <Download size={12} />
-                    </button>
-                  </div>
                   
-                  {hasValidPrompt(creation) && (
-                    <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedImage(creation);
-                        }}
-                        title="View Prompt"
-                      >
-                        <MessageSquare size={12} />
-                      </button>
+                  {/* Selection Indicator */}
+                  {presetCreationMode && selectedForPreset.includes(creation.id) && (
+                    <div className="absolute top-1 right-1 bg-[#e6d281] text-gray-800 rounded-full w-5 h-5 flex items-center justify-center">
+                      <CheckCircle size={12} />
                     </div>
+                  )}
+                  
+                  {/* Action Buttons - Only show when not in preset creation mode */}
+                  {!presetCreationMode && (
+                    <>
+                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                        <button 
+                          className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(creation.id);
+                          }}
+                          title="Download"
+                        >
+                          <Download size={12} />
+                        </button>
+                      </div>
+                      
+                      {hasValidPrompt(creation) && (
+                        <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedImage(creation);
+                            }}
+                            title="View Prompt"
+                          >
+                            <MessageSquare size={12} />
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
                 
