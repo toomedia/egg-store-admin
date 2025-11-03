@@ -14,9 +14,6 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
 import {
   ShoppingCart,
@@ -34,9 +31,6 @@ import {
   DollarSign,
   Users,
   RefreshCw,
-  Download,
-  Filter,
-  MoreHorizontal,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
@@ -56,11 +50,10 @@ const Dashboard = () => {
     avgOrderValue: 0,
     returningCustomers: 0,
   });
-  type SectionKey = 'charts' | 'performance' | 'ordersStatus' | 'bestSellers' | 'recentOrders' | 'activity';
+  type SectionKey = 'charts' | 'performance' | 'bestSellers' | 'recentOrders' | 'activity';
   const [expandedSections, setExpandedSections] = useState<Record<SectionKey, boolean>>({
     charts: true,
     performance: true,
-    ordersStatus: true,
     bestSellers: true,
     recentOrders: true,
     activity: true,
@@ -229,6 +222,7 @@ const processUserGrowthData = (usersData: any[]) => {
   
   return last6Months;
 };
+
   const calculateMetrics = (ordersData: any[], usersData: any[]) => {
     const completedOrders = ordersData.filter(order => order.payment_status === 'completed').length;
     const conversionRate = usersData.length > 0 ? (completedOrders / usersData.length) * 100 : 0;
@@ -288,14 +282,11 @@ const processUserGrowthData = (usersData: any[]) => {
     if (order) {
       acts.push({
         icon: <ShoppingCart className="w-5 h-5" />,
-        message:
-          order.payment_status === "completed"
-            ? `Order #${order.id} completed`
-            : `New order by ${order.user_info?.email || "unknown user"}`,
+        message: `Order #${order.id} completed`,
         sub: order.product_name || "Egg Card",
         time: getRelativeTime(order.created_at),
         timeObj: order.created_at,
-        tag: order.payment_status === "Completed" ? "Completed" : "New Order",
+        tag: "Completed",
       });
     }
 
@@ -337,36 +328,6 @@ const processUserGrowthData = (usersData: any[]) => {
     return `${Math.floor(diff / 86400)} d ago`;
   };
 
-  const countOrdersByStatus = () => {
-    const counts = { 
-      pending: 0, 
-      processing: 0,
-      completed: 0,
-      cancelled: 0
-    };
-    
-    orders.forEach((order) => {
-      const status = order.payment_status?.toLowerCase() || "";
-      
-      if (status.includes("pending")) counts.pending++;
-      else if (status.includes("processing")) counts.processing++;
-      else if (status.includes("complete")) counts.completed++;
-      else if (status.includes("cancel")) counts.cancelled++;
-    });
-    
-    return counts;
-  };
-
-  const statusCounts = countOrdersByStatus();
-
-  // Prepare data for order status pie chart
-  const orderStatusData = [
-    { name: 'Completed', value: statusCounts.completed, color: '#e6d281' },
-    { name: 'Processing', value: statusCounts.processing, color: '#f59e0b' },
-    { name: 'Pending', value: statusCounts.pending, color: '#fbbf24' },
-    { name: 'Cancelled', value: statusCounts.cancelled, color: '#ef4444' },
-  ];
-
   // Calculate sales count per preset
   const salesCountMap: { [key: string]: number } = {};
   orders.forEach((order) => {
@@ -384,7 +345,6 @@ const processUserGrowthData = (usersData: any[]) => {
         id: preset.id,
         title: preset.preset_name?.en_name || "Untitled Preset",
         description: preset.preset_description?.en_description || "No description available",
-        // category: preset.category || "Uncategorized",
         image: preset.preset_images?.[0] || "/placeholder-image.jpg",
         price: preset.preset_price || 0,
         salesCount: salesCount,
@@ -405,6 +365,7 @@ const processUserGrowthData = (usersData: any[]) => {
         preset: preset || null
       };
     });
+
   const toggleSection = (section: SectionKey) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -509,9 +470,7 @@ const processUserGrowthData = (usersData: any[]) => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 pt-0">
             <MetricCard
               title="Conversion Rate"
-              value={`${metrics.conversionRate}%`
-                
-              }
+              value={`${metrics.conversionRate}%`}
               description="Orders per customer"
               trend={metrics.conversionRate > 0 ? "up" : "down"}
               trendValue={metrics.conversionRate > 0 ? "12%" : "0%"}
@@ -539,7 +498,16 @@ const processUserGrowthData = (usersData: any[]) => {
 
       {/* Charts Section */}
       <div className="bg-white rounded-xl shadow mb-6 overflow-hidden">
- 
+        <div 
+          className="flex justify-between items-center p-5 cursor-pointer"
+          onClick={() => toggleSection('charts')}
+        >
+          <h2 className="font-semibold text-xl flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-[#e6d281]" />
+            Analytics Overview
+          </h2>
+          {expandedSections.charts ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+        </div>
         {expandedSections.charts && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-5 pt-0">
             {/* Orders Line Chart */}
@@ -588,146 +556,84 @@ const processUserGrowthData = (usersData: any[]) => {
               </div>
             </div>
 
-{/* Total Users Growth */}
-<div className="bg-gray-50 p-5 rounded-lg">
-  <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-    <Users className="w-4 h-4 text-[#e6d281]" />
-    Total Users Growth
-  </h3>
-  <div className="h-64">
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={userGrowthData}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-        <XAxis dataKey="name" stroke="#6b7280" />
-        <YAxis stroke="#6b7280" />
-        <Tooltip 
-          formatter={(value) => [`${value}`, 'Total Users']}
-          contentStyle={{ 
-            backgroundColor: '#1f2937', 
-            border: 'none', 
-            borderRadius: '0.5rem',
-            color: 'white'
-          }}
-        />
-        <Line 
-          type="monotone" 
-          dataKey="cumulative" 
-          name="Total Users" 
-          stroke="#e6d281" 
-          strokeWidth={3}
-          activeDot={{ r: 6, fill: '#e6d281' }} 
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  </div>
-</div>
+            {/* Total Users Growth */}
+            <div className="bg-gray-50 p-5 rounded-lg">
+              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#e6d281]" />
+                Total Users Growth
+              </h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={userGrowthData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="name" stroke="#6b7280" />
+                    <YAxis stroke="#6b7280" />
+                    <Tooltip 
+                      formatter={(value) => [`${value}`, 'Total Users']}
+                      contentStyle={{ 
+                        backgroundColor: '#1f2937', 
+                        border: 'none', 
+                        borderRadius: '0.5rem',
+                        color: 'white'
+                      }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="cumulative" 
+                      name="Total Users" 
+                      stroke="#e6d281" 
+                      strokeWidth={3}
+                      activeDot={{ r: 6, fill: '#e6d281' }} 
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-  {/* Orders by Status */}
-<div className="bg-white rounded-xl shadow">
-  <div 
-    className="flex justify-between items-center p-5 cursor-pointer"
-    onClick={() => toggleSection('ordersStatus')}
-  >
-    <h2 className="font-semibold text-xl flex items-center gap-2">
-      <CreditCard className="w-5 h-5 text-[#e6d281]" />
-      Orders by Status
-    </h2>
-    {expandedSections.ordersStatus ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-  </div>
-  {expandedSections.ordersStatus && (
-    <div className="p-5 pt-0">
-      <div className="flex items-center justify-center mb-4 min-h-[280px]">
-        <ResponsiveContainer width="100%" height={280}>
-          <PieChart>
-            <Pie
-              data={orderStatusData}
-              cx="50%"
-              cy="50%"
-              innerRadius={70}
-              outerRadius={90}
-              paddingAngle={2}
-              dataKey="value"
-              label={({ name, percent, value }) => 
-                (value as number) > 0 ? `${name}: ${((percent as number) * 100).toFixed(0)}%` : ''
-              }
-              labelLine={false}
-            >
-              {orderStatusData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip 
-              formatter={(value) => [`${value} orders`, '']}
-              contentStyle={{ 
-                backgroundColor: '#f9fafb', 
-                border: '1px solid #e5e7eb', 
-                borderRadius: '0.5rem',
-                color: '#374151'
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="space-y-2">
-        {orderStatusData.map((status, index) => (
-          <StatusRow
-            key={index}
-            color={status.color}
-            label={status.name}
-            count={status.value}
-          />
-        ))}
-      </div>
-    </div>
-  )}
-</div>
-        {/* Best Selling Presets */}
-        <div className="bg-white rounded-xl shadow overflow-hidden">
-          <div 
-            className="flex justify-between items-center p-5 cursor-pointer"
-            onClick={() => toggleSection('bestSellers')}
-          >
-            <h2 className="font-semibold text-xl flex items-center gap-2">
-              <Package className="w-5 h-5 text-[#e6d281]" />
-              Best Selling Presets
-            </h2>
-            {expandedSections.bestSellers ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </div>
-          {expandedSections.bestSellers && (
-            <div className="p-5 pt-0">
-              {presetSalesData.length === 0 ? (
-                <p className="text-gray-400 text-base text-center py-8">No sales data available.</p>
-              ) : (
-                <div className="space-y-4">
-                  {presetSalesData.map((preset) => (
-                    <BestSellerRow
-                      key={preset.id}
-                      title={preset.title}
-                      description={preset.description}
-                      // category={preset.category}
-                      image={preset.image}
-                      price={preset.price}
-                      salesCount={preset.salesCount}
-                      revenue={preset.revenue}
-                    />
-                  ))}
-                </div>
-              )}
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <Link href="/dashboard/presets">
-                  <button className="w-full flex items-center justify-center gap-2 text-[#e6d281] hover:text-[#d4c073] transition-colors">
-                    View all presets
-                    <Eye className="w-4 h-4" />
-                  </button>
-                </Link>
-              </div>
-            </div>
-          )}
+      {/* Best Selling Presets */}
+      <div className="bg-white rounded-xl shadow mb-6 overflow-hidden">
+        <div 
+          className="flex justify-between items-center p-5 cursor-pointer"
+          onClick={() => toggleSection('bestSellers')}
+        >
+          <h2 className="font-semibold text-xl flex items-center gap-2">
+            <Package className="w-5 h-5 text-[#e6d281]" />
+            Best Selling Presets
+          </h2>
+          {expandedSections.bestSellers ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
         </div>
+        {expandedSections.bestSellers && (
+          <div className="p-5 pt-0">
+            {presetSalesData.length === 0 ? (
+              <p className="text-gray-400 text-base text-center py-8">No sales data available.</p>
+            ) : (
+              <div className="space-y-4">
+                {presetSalesData.map((preset) => (
+                  <BestSellerRow
+                    key={preset.id}
+                    title={preset.title}
+                    description={preset.description}
+                    image={preset.image}
+                    price={preset.price}
+                    salesCount={preset.salesCount}
+                    revenue={preset.revenue}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <Link href="/dashboard/presets">
+                <button className="w-full flex items-center justify-center gap-2 text-[#e6d281] hover:text-[#d4c073] transition-colors">
+                  View all presets
+                  <Eye className="w-4 h-4" />
+                </button>
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Latest Orders Section */}
@@ -750,13 +656,6 @@ const processUserGrowthData = (usersData: any[]) => {
               <div className="space-y-4">
                 {latestOrders.map((order) => (
                   <div key={order.id} className="flex items-center p-4 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-md transition-all duration-200">
-                    {/* <div className="relative w-16 h-16 flex-shrink-0 mr-4 bg-white rounded-md overflow-hidden shadow-sm">
-                      <SafeImage
-                        src={order.preset?.preset_images?.[0] || "/placeholder-image.jpg"}
-                        alt={order.preset?.preset_name?.en_name || order.preset?.name || 'Untitled Design'}
-                        className="object-cover"
-                      />
-                    </div> */}
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-semibold text-gray-900 text-base truncate">
@@ -771,12 +670,8 @@ const processUserGrowthData = (usersData: any[]) => {
                           <User className="w-4 h-4 mr-1" />
                           <span className="truncate">{order.user_info?.email || "Unknown"}</span>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium
-                          ${order.payment_status === 'completed' ? 'bg-green-100 text-green-800' : 
-                            order.payment_status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                            order.payment_status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'}`}>
-                          {order.payment_status || 'pending'}
+                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          Completed
                         </span>
                       </div>
                     </div>
@@ -860,16 +755,6 @@ const MetricCard = ({ title, value, description, trend, trendValue, icon }: any)
   </div>
 );
 
-const StatusRow = ({ color, label, count }: any) => (
-  <div className="flex justify-between items-center py-2 text-base text-gray-700">
-    <div className="flex items-center gap-2">
-      <span className={`w-3 h-3 rounded-full`} style={{ backgroundColor: color }}></span>
-      <span>{label}</span>
-    </div>
-    <span className="font-semibold">{count} orders</span>
-  </div>
-);
-
 const SafeImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
   const isExternal = src.startsWith('http');
   
@@ -896,12 +781,9 @@ const SafeImage = ({ src, alt, className }: { src: string, alt: string, classNam
   );
 };
 
-
-
 const BestSellerRow = ({ 
   title, 
   description, 
-  category, 
   image, 
   price, 
   salesCount, 
@@ -920,11 +802,14 @@ const BestSellerRow = ({
         <h4 className="font-medium text-gray-900 truncate text-base">{title}</h4>
         <span className="text-base font-semibold text-green-600 ml-2">${price}</span>
       </div>
-      <div className="flex justify-between items-center mt-1">
-        <span className="text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded">
-          {category}
+      <p className="text-sm text-gray-500 truncate mt-1">{description}</p>
+      <div className="flex justify-between items-center mt-2">
+        <span className="text-sm text-gray-600">
+          {salesCount} sales
         </span>
-
+        <span className="text-sm font-semibold text-green-600">
+          ${revenue} revenue
+        </span>
       </div>
     </div>
   </div>
@@ -947,7 +832,3 @@ const ActivityRow = ({ icon, message, sub, time, tag }: any) => (
     </div>
   </div>
 );
-
-
-
-

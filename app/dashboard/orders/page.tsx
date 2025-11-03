@@ -6,9 +6,6 @@ import { getItem, setItem } from "@/utils/indexedDB";
 import { supabase } from "../../../utils/supabaseClient";
 import {
   Package,
-  Truck,
-  CheckCircle,
-  XCircle,
   Search,
   Filter,
   User,
@@ -27,43 +24,27 @@ const OrdersPage = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
-  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const DB_NAME = "egg-store-db";
   const STORE_NAME = "orders";
 
-  const paymentStatuses = [
-    { id: "all", name: "All Orders" },
-    { id: "pending", name: "Pending" },
-    { id: "processing", name: "Processing" },
-    { id: "completed", name: "Completed" },
-    { id: "cancelled", name: "Cancelled" },
-  ];
-
-  // Filter orders based on search query and filters
+  // Filter orders based on search query
   useEffect(() => {
-    if (!searchQuery && paymentStatusFilter === "all") {
+    if (!searchQuery) {
       setFilteredOrders(orders);
     } else {
       const filtered = orders.filter((order) => {
         const search = searchQuery.toLowerCase();
-        const matchesSearch = searchQuery
-          ? (order.order_id?.toLowerCase() || "").includes(search) ||
-            (order.user_info?.firstName?.toLowerCase() || "").includes(search) ||
-            (order.user_info?.email?.toLowerCase() || "").includes(search)
-          : true;
-
-        const matchesStatus =
-          paymentStatusFilter === "all" ||
-          order.payment_status === paymentStatusFilter;
-        
-        return matchesSearch && matchesStatus;
+        return (
+          (order.order_id?.toLowerCase() || "").includes(search) ||
+          (order.user_info?.firstName?.toLowerCase() || "").includes(search) ||
+          (order.user_info?.email?.toLowerCase() || "").includes(search)
+        );
       });
       setFilteredOrders(filtered);
     }
-  }, [orders, searchQuery, paymentStatusFilter]);
+  }, [orders, searchQuery]);
 
   useEffect(() => {
     const fetchAllOrders = async () => {
@@ -186,60 +167,6 @@ const OrdersPage = () => {
     );
   };
 
-  const updateOrderPaymentStatus = async (
-    orderId: string,
-    newStatus: string
-  ) => {
-    setUpdatingStatus(orderId);
-    setError(null);
-    try {
-      const { data, error } = await supabase
-        .from("orders")
-        .update({
-          payment_status: newStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", orderId)
-        .select();
-
-      if (error) {
-        console.error("Error updating order payment status:", error);
-        if (error.code === "PGRST204") {
-          setError(
-            "Database schema issue. Please check if the 'payment_status' column exists in your orders table."
-          );
-        } else {
-          setError("Failed to update order payment status. Please try again.");
-        }
-      } else {
-        console.log("Order payment status updated successfully:", data);
-
-        // Update local state immediately for better UX
-        const updatedOrders = orders.map((order) =>
-          order.id === orderId ? { ...order, payment_status: newStatus } : order
-        );
-        setOrders(updatedOrders);
-
-        // Update IndexedDB
-        try {
-          await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
-        } catch (indexedDBError) {
-          console.warn("Could not update IndexedDB:", indexedDBError);
-        }
-
-        // Update selected order if it's the one being updated
-        if (selectedOrder && selectedOrder.id === orderId) {
-          setSelectedOrder({ ...selectedOrder, payment_status: newStatus });
-        }
-      }
-    } catch (err) {
-      console.error("Unexpected error updating payment status:", err);
-      setError("An unexpected error occurred. Please try again.");
-    } finally {
-      setUpdatingStatus(null);
-    }
-  };
-
   const refreshOrders = async () => {
     setLoading(true);
     setError(null);
@@ -268,42 +195,6 @@ const OrdersPage = () => {
       console.error("Unexpected error refreshing orders:", err);
       setError("An unexpected error occurred. Please try again.");
       setLoading(false);
-    }
-  };
-
-  const getPaymentStatusBadge = (payment_status: string) => {
-    const baseClasses =
-      "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium";
-
-    switch (payment_status) {
-      case "completed":
-        return (
-          <span className={`${baseClasses} bg-green-100 text-green-800`}>
-            <CheckCircle className="mr-1.5" size={14} />
-            Completed
-          </span>
-        );
-      case "processing":
-        return (
-          <span className={`${baseClasses} bg-blue-100 text-blue-800`}>
-            <Truck className="mr-1.5" size={14} />
-            Processing
-          </span>
-        );
-      case "cancelled":
-        return (
-          <span className={`${baseClasses} bg-red-100 text-red-800`}>
-            <XCircle className="mr-1.5" size={14} />
-            Cancelled
-          </span>
-        );
-      default:
-        return (
-          <span className={`${baseClasses} bg-yellow-100 text-yellow-800`}>
-            <Package className="mr-1.5" size={14} />
-            Pending
-          </span>
-        );
     }
   };
 
@@ -425,37 +316,6 @@ const OrdersPage = () => {
                   <Edit className="mr-1.5" size={14} />
                   {formatDate(selectedOrder.created_at)}
                 </div>
-              </div>
-              <div className="flex items-center gap-3 mt-2 md:mt-0">
-                <div className="relative">
-                  <select
-                    value={selectedOrder.payment_status || "pending"}
-                    onChange={(e) =>
-                      updateOrderPaymentStatus(selectedOrder.id, e.target.value)
-                    }
-                    disabled={updatingStatus === selectedOrder.id}
-                    className="appearance-none bg-white border border-gray-300 rounded-md py-2 px-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-[#e6d281] focus:border-transparent"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="processing">Processing</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                  {updatingStatus === selectedOrder.id ? (
-                    <Loader
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 animate-spin text-gray-400"
-                      size={16}
-                    />
-                  ) : (
-                    <Edit
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400"
-                      size={16}
-                    />
-                  )}
-                </div>
-                {getPaymentStatusBadge(
-                  selectedOrder.payment_status || "pending"
-                )}
               </div>
             </div>
           </div>
@@ -595,38 +455,19 @@ const OrdersPage = () => {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Search */}
       <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="text-gray-400" size={18} />
-            </div>
-            <input
-              type="text"
-              placeholder="Search by order ID, name, or email..."
-              className="pl-10 w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e6d281] focus:border-transparent"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+        <div className="relative max-w-md">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="text-gray-400" size={18} />
           </div>
-
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Filter className="text-gray-400" size={18} />
-            </div>
-            <select
-              className="pl-10 w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e6d281] focus:border-transparent appearance-none"
-              value={paymentStatusFilter}
-              onChange={(e) => setPaymentStatusFilter(e.target.value)}
-            >
-              {paymentStatuses.map((status) => (
-                <option key={status.id} value={status.id}>
-                  {status.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <input
+            type="text"
+            placeholder="Search by order ID, name, or email..."
+            className="pl-10 w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e6d281] focus:border-transparent"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
       </div>
 
@@ -658,7 +499,7 @@ const OrdersPage = () => {
           <p className="text-gray-500">
             {searchQuery 
               ? `No orders found matching "${searchQuery}". Try a different search term.`
-              : 'Try adjusting your search or filter criteria'
+              : 'No orders have been placed yet.'
             }
           </p>
         </div>
@@ -757,35 +598,8 @@ const OrdersPage = () => {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="relative">
-                          <select
-                            value={order.payment_status || "pending"}
-                            onChange={(e) =>
-                              updateOrderPaymentStatus(order.id, e.target.value)
-                            }
-                            disabled={updatingStatus === order.id}
-                            className="appearance-none bg-white border border-gray-300 rounded-md py-1 px-2 pr-6 text-xs focus:outline-none focus:ring-1 focus:ring-[#e6d281] focus:border-transparent"
-                          >
-                            <option value="pending">Pending</option>
-                            <option value="processing">Processing</option>
-                            <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
-                          {updatingStatus === order.id ? (
-                            <Loader
-                              className="absolute right-1 top-1/2 transform -translate-y-1/2 animate-spin text-gray-400"
-                              size={12}
-                            />
-                          ) : (
-                            <Edit
-                              className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400"
-                              size={12}
-                            />
-                          )}
-                        </div>
-                        {getPaymentStatusBadge(order.payment_status || "pending")}
                         <Edit
-                          className="ml-1 text-gray-400 group-hover:text-[#e6d281] transition-colors cursor-pointer"
+                          className="text-gray-400 group-hover:text-[#e6d281] transition-colors cursor-pointer"
                           size={18}
                           onClick={() => setSelectedOrder(order)}
                         />
