@@ -1071,7 +1071,7 @@ const getStatusBadge = (status: string) => {
     return (
       <div className="container mx-auto px-4 py-8 font-manrope">
         {/* Egg Selection Modal */}
-        {showEggModal && (
+        {/* {showEggModal && (
           <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
               <div className="p-6 border-b border-gray-200">
@@ -1203,7 +1203,7 @@ const getStatusBadge = (status: string) => {
             </div>
           </div>
         )}
-        
+         */}
         <div 
           onClick={() => {
             setCurrentView('list');
@@ -1387,7 +1387,7 @@ const getStatusBadge = (status: string) => {
             </h2>
             
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <button
+              {/* <button
                 type="button"
                 onClick={handleOpenEggModal}
                 disabled={!formData.size.value}
@@ -1396,7 +1396,7 @@ const getStatusBadge = (status: string) => {
                 <Grid className="mr-2" size={18} />
                 Select from Existing Eggs
               </button>
-              
+               */}
               <div 
                 className="flex-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-[#e6d281] transition-colors cursor-pointer"
                 onClick={() => {

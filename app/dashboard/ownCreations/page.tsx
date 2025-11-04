@@ -51,6 +51,72 @@ interface PresetCreationData {
   selectedEggs: Creation[];
 }
 
+// IndexedDB utility functions
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('CreationsDB', 1);
+    
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains('creations')) {
+        const store = db.createObjectStore('creations', { keyPath: 'id' });
+        store.createIndex('source', 'source', { unique: false });
+        store.createIndex('created_at', 'created_at', { unique: false });
+      }
+    };
+  });
+};
+
+const storeCreationsInDB = async (creations: Creation[]): Promise<void> => {
+  try {
+    console.log('💾 Storing creations in IndexedDB...', creations.length);
+    const db = await openDB();
+    const transaction = db.transaction(['creations'], 'readwrite');
+    const store = transaction.objectStore('creations');
+    
+    // Clear existing data
+    await store.clear();
+    
+    // Store new creations
+    for (const creation of creations) {
+      store.add(creation);
+    }
+    
+    await transaction.done;
+    console.log('✅ Successfully stored creations in IndexedDB:', creations.length);
+  } catch (error) {
+    console.error('❌ Error storing creations in IndexedDB:', error);
+  }
+};
+
+const getCreationsFromDB = async (): Promise<Creation[]> => {
+  try {
+    console.log('🏠 Checking IndexedDB for cached creations...');
+    const db = await openDB();
+    const transaction = db.transaction(['creations'], 'readonly');
+    const store = transaction.objectStore('creations');
+    const request = store.getAll();
+    
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const result = request.result;
+        console.log('📊 IndexedDB cache result:', result.length, 'creations found');
+        resolve(result);
+      };
+      request.onerror = () => {
+        console.error('❌ Error retrieving from IndexedDB:', request.error);
+        reject(request.error);
+      };
+    });
+  } catch (error) {
+    console.error('❌ Error accessing IndexedDB:', error);
+    return [];
+  }
+};
+
 const OwnCreations = () => {
   const [creations, setCreations] = useState<Creation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +133,7 @@ const OwnCreations = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'complete' | 'error'>('idle');
   
   // Preset creation state
   const [presetCreationMode, setPresetCreationMode] = useState(false);
@@ -82,144 +149,237 @@ const OwnCreations = () => {
 
   const itemsPerBatch = 100;
 
-  const fetchGeneratedImagesFromSupabase = async (offset = 0, batchSize = 50): Promise<{ creations: Creation[], hasMore: boolean }> => {
+  // Real-time subscription for users table changes
+  const setupRealtimeSubscription = () => {
+    console.log('🔔 Setting up real-time subscription for users table...');
+    
+    const subscription = supabase
+      .channel('users-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'users'
+        },
+        (payload) => {
+          console.log('🔄 Real-time update received:', payload);
+          
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const newUser = payload.new;
+            if (newUser.generated_images) {
+              console.log('🆕 New/Updated user with generated_images detected');
+              // Refresh data to include new images
+              syncWithSupabase();
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Real-time subscription status:', status);
+      });
+
+    return subscription;
+  };
+
+  const fetchFromSupabase = async (offset = 0, batchSize = 50): Promise<{ creations: Creation[], hasMore: boolean }> => {
     try {
-      const { data, error } = await supabase
-        .from('user_own_creations')
-        .select('*')
+      console.log('🌐 Fetching from Supabase...');
+      setSyncStatus('syncing');
+      
+      const { data, error, count } = await supabase
+        .from('users')
+        .select('id, email, created_at, generated_images', { count: 'exact' })
+        .not('generated_images', 'is', null)
         .order('created_at', { ascending: false })
         .range(offset, offset + batchSize - 1);
       
+      console.log('📊 Supabase response:', {
+        dataCount: data?.length,
+        error: error,
+        totalCount: count
+      });
+
       if (error) {
-        console.error('Error fetching user_own_creations:', error);
+        console.error('❌ Supabase fetch failed:', error);
+        setSyncStatus('error');
         return { creations: [], hasMore: false };
       }
 
       if (!data || !Array.isArray(data)) {
+        console.log('⚠️ No data from Supabase');
+        setSyncStatus('complete');
         return { creations: [], hasMore: false };
       }
 
+      console.log('✅ Processing Supabase data...');
       const collectedCreations: Creation[] = [];
       const seenImageUrls = new Set<string>();
 
-      for (const creation of data) {
-        const isGuest = !creation.user_uid || creation.user_uid === null;
-        const creationId = creation.id;
+      console.log('👥 Users to process:', data.length);
 
-        if (creation.image_url) {
-          try {
-            let imageUrls: string[] = [];
-            
-            if (typeof creation.image_url === 'string') {
-              try {
-                const parsed = JSON.parse(creation.image_url);
-                if (Array.isArray(parsed)) {
-                  imageUrls = parsed.filter(url => typeof url === 'string' && url.length > 0);
-                }
-              } catch (e) {
-                if (creation.image_url.startsWith('http') || creation.image_url.startsWith('data:')) {
-                  imageUrls = [creation.image_url];
-                }
-              }
-            } else if (Array.isArray(creation.image_url)) {
-              imageUrls = creation.image_url.filter((url: string) => typeof url === 'string' && url.length > 0);
-            }
+      for (const user of data) {
+        const userId = user.id;
+        const userEmail = user.email || 'Unknown User';
 
-            imageUrls.forEach((imageUrl: string, index: number) => {
-              if (imageUrl && typeof imageUrl === 'string' && !seenImageUrls.has(imageUrl)) {
-                seenImageUrls.add(imageUrl);
-                collectedCreations.push({
-                  id: `${creationId}-image_url-${index}`,
-                  title: '',
-                  image_url: imageUrl,
-                  prompt: '', 
-                  source: 'image_url',
-                  creator_id: creation.user_uid || 'guest',
-                  creator: {
-                    id: creation.user_uid || 'guest',
-                    name: isGuest ? 'Guest User' : 'Registered User',
-                    avatar_url: null
-                  },
-                  tags: creation.tags || [],
-                  likes: creation.likes || 0,
-                  downloads: creation.downloads || 0,
-                  created_at: creation.created_at,
-                  updated_at: creation.updated_at || creation.created_at
-                });
-              }
-            });
-          } catch (error) {
-            console.error('Error processing image_url:', error, 'for creation:', creationId);
-          }
-        }
-
-        if (creation.generated_images) {
+        if (user.generated_images) {
           try {
             let generatedImagesData: any[] = [];
             
-            if (typeof creation.generated_images === 'string') {
+            // Parse generated_images field
+            if (typeof user.generated_images === 'string') {
               try {
-                const parsed = JSON.parse(creation.generated_images);
+                const parsed = JSON.parse(user.generated_images);
                 
-                if (parsed.generated_images && Array.isArray(parsed.generated_images)) {
-                  generatedImagesData = parsed.generated_images;
-                } 
-                else if (Array.isArray(parsed)) {
+                if (Array.isArray(parsed)) {
                   generatedImagesData = parsed;
+                } 
+                else if (parsed.generated_images && Array.isArray(parsed.generated_images)) {
+                  generatedImagesData = parsed.generated_images;
                 }
                 else if (parsed.url || parsed.image_url) {
                   generatedImagesData = [parsed];
                 }
               } catch (e) {
-                if (creation.generated_images.startsWith('http') || creation.generated_images.startsWith('data:')) {
-                  generatedImagesData = [{ url: creation.generated_images, prompt: 'Generated image' }];
+                if (user.generated_images.startsWith('http') || user.generated_images.startsWith('data:')) {
+                  generatedImagesData = [{ url: user.generated_images, prompt: 'Generated image' }];
                 }
               }
-            } else if (typeof creation.generated_images === 'object') {
-              if (creation.generated_images.generated_images && Array.isArray(creation.generated_images.generated_images)) {
-                generatedImagesData = creation.generated_images.generated_images;
-              } else if (Array.isArray(creation.generated_images)) {
-                generatedImagesData = creation.generated_images;
+            } else if (typeof user.generated_images === 'object') {
+              if (Array.isArray(user.generated_images)) {
+                generatedImagesData = user.generated_images;
+              } else if (user.generated_images.generated_images && Array.isArray(user.generated_images.generated_images)) {
+                generatedImagesData = user.generated_images.generated_images;
               } else {
-                generatedImagesData = [creation.generated_images];
+                generatedImagesData = [user.generated_images];
               }
             }
 
+            // Process each generated image
             generatedImagesData.forEach((imgData: any, index: number) => {
               const imageUrl = imgData.url || imgData.image_url;
-              const prompt = imgData.prompt || '';
+              const prompt = imgData.prompt || imgData.description || '';
+              const tags = imgData.tags || [];
+              const title = imgData.title || '';
               
               if (imageUrl && typeof imageUrl === 'string' && !seenImageUrls.has(imageUrl)) {
                 seenImageUrls.add(imageUrl);
+                const creationId = `${userId}-generated_images-${index}-${Date.now()}`;
+                
                 collectedCreations.push({
-                  id: `${creationId}-generated_images-${index}`,
-                  title: '',
+                  id: creationId,
+                  title: title,
                   image_url: imageUrl,
                   prompt: prompt,
                   source: 'generated_images',
-                  creator_id: creation.user_uid || 'guest',
+                  creator_id: userId,
                   creator: {
-                    id: creation.user_uid || 'guest',
-                    name: isGuest ? 'Guest User' : 'Registered User',
+                    id: userId,
+                    name: userEmail,
                     avatar_url: null
                   },
-                  tags: creation.tags || [],
-                  likes: creation.likes || 0,
-                  downloads: creation.downloads || 0,
-                  created_at: creation.created_at,
-                  updated_at: creation.updated_at || creation.created_at
+                  tags: tags,
+                  likes: imgData.likes || 0,
+                  downloads: imgData.downloads || 0,
+                  created_at: imgData.created_at || user.created_at,
+                  updated_at: imgData.updated_at || user.created_at
                 });
               }
             });
           } catch (error) {
-            console.error('Error processing generated_images:', error, 'for creation:', creationId);
+            console.error(`❌ Error processing user ${userId}:`, error);
           }
         }
       }
 
-      return { creations: collectedCreations, hasMore: data.length === batchSize };
+      console.log(`🎉 Supabase fetch complete: ${collectedCreations.length} creations`);
+      setSyncStatus('complete');
+      
+      return { 
+        creations: collectedCreations, 
+        hasMore: data.length === batchSize 
+      };
     } catch (error) {
-      console.error('Error in fetchGeneratedImagesFromSupabase:', error);
+      console.error('💥 Error in fetchFromSupabase:', error);
+      setSyncStatus('error');
+      return { creations: [], hasMore: false };
+    }
+  };
+
+  const syncWithSupabase = async () => {
+    console.log('🔄 Syncing with Supabase...');
+    try {
+      const result = await fetchFromSupabase(0, 100);
+      
+      if (result.creations.length > 0) {
+        console.log('🔄 Updating with fresh Supabase data...');
+        
+        // Update state with new data
+        setCreations(prevCreations => {
+          const newCreations = [...result.creations];
+          
+          // Update tags
+          const tagsSet = new Set<string>(allTags);
+          newCreations.forEach(creation => {
+            if (creation.tags && Array.isArray(creation.tags)) {
+              creation.tags.forEach((tag: string) => tagsSet.add(tag));
+            }
+          });
+          setAllTags(Array.from(tagsSet));
+          
+          // Store in IndexedDB
+          storeCreationsInDB(newCreations);
+          
+          return newCreations;
+        });
+        
+        setLastSync(new Date());
+        console.log('✅ Sync completed successfully');
+        
+        if (result.creations.length > creations.length) {
+          showNotification('success', `Synced ${result.creations.length - creations.length} new creations`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Sync failed:', error);
+      showNotification('error', 'Sync failed');
+    }
+  };
+
+  const fetchGeneratedImagesFromUsers = async (offset = 0, batchSize = 50): Promise<{ creations: Creation[], hasMore: boolean }> => {
+    try {
+      console.log(`🔄 fetchGeneratedImagesFromUsers - Offset: ${offset}, BatchSize: ${batchSize}`);
+      
+      // STRATEGY: IndexedDB first, then Supabase
+      console.log('🏠 STEP 1: Loading from IndexedDB (instant)...');
+      const dbCreations = await getCreationsFromDB();
+      
+      if (dbCreations.length > 0 && offset === 0) {
+        console.log('✅ USING INDEXEDDB CACHE:', dbCreations.length, 'creations');
+        
+        // Start Supabase sync in background for fresh data
+        setTimeout(() => {
+          console.log('🔄 BACKGROUND: Starting Supabase sync...');
+          syncWithSupabase();
+        }, 1000);
+        
+        return { 
+          creations: dbCreations.slice(offset, offset + batchSize), 
+          hasMore: dbCreations.length > offset + batchSize 
+        };
+      }
+
+      console.log('🔄 STEP 2: No cache found, fetching from Supabase...');
+      const supabaseResult = await fetchFromSupabase(offset, batchSize);
+      
+      if (supabaseResult.creations.length > 0 && offset === 0) {
+        console.log('💾 Caching Supabase data in IndexedDB...');
+        await storeCreationsInDB(supabaseResult.creations);
+      }
+      
+      return supabaseResult;
+    } catch (error) {
+      console.error('💥 Error in fetchGeneratedImagesFromUsers:', error);
       return { creations: [], hasMore: false };
     }
   };
@@ -227,12 +387,13 @@ const OwnCreations = () => {
   const fetchMoreCreations = async () => {
     if (loadingMore || !hasMore) return;
     
+    console.log('🔄 fetchMoreCreations called');
     setLoadingMore(true);
     try {
       const dbRecordsFetched = Math.floor(creations.length / 5);
       const batchSize = 50;
       
-      const result = await fetchGeneratedImagesFromSupabase(dbRecordsFetched, batchSize);
+      const result = await fetchGeneratedImagesFromUsers(dbRecordsFetched, batchSize);
       const newCreations = result.creations;
       const moreAvailable = result.hasMore;
       
@@ -258,6 +419,7 @@ const OwnCreations = () => {
         setHasMore(false);
       }
     } catch (err) {
+      console.error('❌ Error in fetchMoreCreations:', err);
       showNotification('error', 'Failed to load more creations');
     } finally {
       setLoadingMore(false);
@@ -265,97 +427,78 @@ const OwnCreations = () => {
   };
 
   useEffect(() => {
-    const fetchInitialCreations = async () => {
+    const initializeData = async () => {
       try {
+        console.log('🚀 Initializing data...');
         setLoading(true);
         
-        let allFetchedCreations: Creation[] = [];
-        let offset = 0;
-        const batchSize = 50;
-        let hasMoreData = true;
+        // STEP 1: Load from IndexedDB instantly
+        console.log('🏠 Loading from IndexedDB...');
+        const dbCreations = await getCreationsFromDB();
         
-        while (hasMoreData && allFetchedCreations.length < itemsPerBatch) {
-          const result = await fetchGeneratedImagesFromSupabase(offset, batchSize);
-          const creations = result.creations;
-          const hasMore = result.hasMore;
+        if (dbCreations.length > 0) {
+          console.log('✅ IndexedDB loaded instantly:', dbCreations.length, 'creations');
+          setCreations(dbCreations);
+          setLoading(false);
           
-          if (creations.length === 0) {
-            hasMoreData = false;
-            break;
-          }
-          
-          allFetchedCreations = [...allFetchedCreations, ...creations];
-          offset += batchSize;
-          
-          if (!hasMore || creations.length < batchSize) {
-            hasMoreData = false;
-          }
+          // Extract tags
+          const tagsSet = new Set<string>();
+          dbCreations.forEach(creation => {
+            if (creation.tags && Array.isArray(creation.tags)) {
+              creation.tags.forEach((tag: string) => tagsSet.add(tag));
+            }
+          });
+          setAllTags(Array.from(tagsSet));
         }
         
-        const tagsSet = new Set<string>();
-        allFetchedCreations.forEach(creation => {
-          if (creation.tags && Array.isArray(creation.tags)) {
-            creation.tags.forEach((tag: string) => tagsSet.add(tag));
-          }
-        });
-        setAllTags(Array.from(tagsSet));
+        // STEP 2: Sync with Supabase for fresh data
+        console.log('🔄 Syncing with Supabase for fresh data...');
+        await syncWithSupabase();
         
-        setCreations(allFetchedCreations);
-        setHasMore(hasMoreData);
+        // STEP 3: Setup real-time subscriptions
+        console.log('🔔 Setting up real-time subscriptions...');
+        const subscription = setupRealtimeSubscription();
+        
         setLastSync(new Date());
-        setLoading(false);
+        
+        return () => {
+          console.log('🧹 Cleaning up real-time subscription');
+          subscription.unsubscribe();
+        };
       } catch (err) {
+        console.error('💥 Initialization failed:', err);
         setLoading(false);
-        showNotification('error', 'Failed to fetch creations');
+        showNotification('error', 'Failed to load creations');
       }
     };
 
-    fetchInitialCreations();
+    initializeData();
   }, []);
 
   const refreshCreations = async () => {
+    console.log('🔄 Manual refresh triggered');
     setLoading(true);
     setDisplayedCount(100);
     setHasMore(true);
     
     try {
-      let allFetchedCreations: Creation[] = [];
-      let offset = 0;
-      const batchSize = 50;
-      let hasMoreData = true;
-      
-      while (hasMoreData && allFetchedCreations.length < itemsPerBatch) {
-        const result = await fetchGeneratedImagesFromSupabase(offset, batchSize);
-        const creations = result.creations;
-        const hasMore = result.hasMore;
-        
-        if (creations.length === 0) {
-          hasMoreData = false;
-          break;
-        }
-        
-        allFetchedCreations = [...allFetchedCreations, ...creations];
-        offset += batchSize;
-        
-        if (!hasMore || creations.length < batchSize) {
-          hasMoreData = false;
-        }
+      console.log('🧹 Clearing cache for fresh data...');
+      // Clear IndexedDB to force fresh Supabase fetch
+      try {
+        const db = await openDB();
+        const transaction = db.transaction(['creations'], 'readwrite');
+        const store = transaction.objectStore('creations');
+        await store.clear();
+        console.log('✅ Cache cleared');
+      } catch (error) {
+        console.error('❌ Error clearing cache:', error);
       }
-      
-      const tagsSet = new Set<string>();
-      allFetchedCreations.forEach(creation => {
-        if (creation.tags && Array.isArray(creation.tags)) {
-          creation.tags.forEach((tag: string) => tagsSet.add(tag));
-        }
-      });
-      setAllTags(Array.from(tagsSet));
-      
-      setCreations(allFetchedCreations);
-      setHasMore(hasMoreData);
-      setLastSync(new Date());
+
+      await syncWithSupabase();
       setLoading(false);
       showNotification('success', 'Creations refreshed successfully');
     } catch (err) {
+      console.error('❌ Refresh failed:', err);
       setLoading(false);
       showNotification('error', 'Failed to refresh creations');
     }
@@ -367,35 +510,61 @@ const OwnCreations = () => {
     setDeleting(true);
     try {
       const idParts = selectedImage.id.split('-');
-      const originalId = idParts.slice(0, -2).join('-');
+      const userId = idParts[0];
+      const imageIndex = parseInt(idParts[2]);
       
-      console.log('Deleting asset with ID:', originalId, 'Selected image ID:', selectedImage.id);
+      console.log('🗑️ Deleting asset for user:', userId, 'Image index:', imageIndex);
       
-      const { error } = await supabase
-        .from('user_own_creations')
-        .delete()
-        .eq('id', originalId);
+      // Fetch current user data
+      const { data: userData, error: fetchError } = await supabase
+        .from('users')
+        .select('generated_images')
+        .eq('id', userId)
+        .single();
 
-      if (error) {
-        throw error;
+      if (fetchError) {
+        throw fetchError;
       }
 
-      console.log('Before deletion - Creations count:', creations.length);
+      if (!userData || !userData.generated_images) {
+        throw new Error('User or generated images not found');
+      }
+
+      let currentImages: any[] = [];
       
+      // Parse current generated_images
+      if (typeof userData.generated_images === 'string') {
+        currentImages = JSON.parse(userData.generated_images);
+      } else if (Array.isArray(userData.generated_images)) {
+        currentImages = userData.generated_images;
+      }
+
+      // Remove the specific image
+      const updatedImages = currentImages.filter((_: any, index: number) => index !== imageIndex);
+
+      // Update user record
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ generated_images: updatedImages })
+        .eq('id', userId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Update local state and IndexedDB
       setCreations(prev => {
-        const filtered = prev.filter(creation => {
-          const creationOriginalId = creation.id.split('-').slice(0, -2).join('-');
-          return creationOriginalId !== originalId;
-        });
-        console.log('After deletion - Creations count:', filtered.length);
-        return filtered;
+        const updated = prev.filter(creation => creation.id !== selectedImage.id);
+        // Update IndexedDB
+        storeCreationsInDB(updated);
+        return updated;
       });
       
       showNotification('success', 'Asset deleted successfully');
       setSelectedImage(null);
       setShowDeleteConfirm(false);
     } catch (error) {
-      console.error('Error deleting asset:', error);
+      console.error('❌ Error deleting asset:', error);
       showNotification('error', 'Failed to delete asset');
     } finally {
       setDeleting(false);
@@ -454,7 +623,7 @@ const OwnCreations = () => {
           en_desc: presetFormData.descEn,
           de_desc: presetFormData.descDe,
         },
-        preset_size_json: { value: selectedEggs.length * 2, price: 0.99 }, // For matching pairs
+        preset_size_json: { value: selectedEggs.length * 2, price: 0.99 },
         preset_price: '0.99',
         preset_images: imageUrls,
         preset_status: 'draft',
@@ -480,7 +649,7 @@ const OwnCreations = () => {
       }, 2000);
 
     } catch (error) {
-      console.error('Error creating preset:', error);
+      console.error('❌ Error creating preset:', error);
       showNotification('error', 'Failed to create preset');
     }
   };
@@ -545,7 +714,7 @@ const OwnCreations = () => {
       }, 2000);
 
     } catch (error) {
-      console.error('Error creating preset:', error);
+      console.error('❌ Error creating preset:', error);
       showNotification('error', 'Failed to create and publish preset');
     } finally {
       setMakingLive(false);
@@ -739,6 +908,14 @@ const OwnCreations = () => {
         </div>
       )}
       
+      {/* Sync Status Indicator */}
+      {syncStatus === 'syncing' && (
+        <div className="fixed top-4 left-4 z-50 p-3 bg-blue-100 text-blue-800 rounded-lg shadow-lg flex items-center">
+          <RefreshCw className="animate-spin mr-2" size={16} />
+          <span className="text-sm">Syncing with server...</span>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-75 z-[100] flex items-center justify-center p-4">
@@ -845,11 +1022,14 @@ const OwnCreations = () => {
               <ImageIcon className="text-[#e6d281] mr-2" size={24} />
               My Creations
             </h1>
-            <p className="text-gray-600">Browse and manage your creative works from both formats</p>
+            <p className="text-gray-600">Browse and manage your creative works from user generated images</p>
             {lastSync && (
               <p className="text-sm text-gray-500 mt-1 flex items-center">
                 <Calendar size={14} className="mr-1" />
                 Last synced: {formatDate(lastSync.toString())}
+                {syncStatus === 'syncing' && (
+                  <RefreshCw className="animate-spin ml-2" size={12} />
+                )}
               </p>
             )}
           </div>
