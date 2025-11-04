@@ -85,13 +85,22 @@ const storeCreationsInDB = async (creations: Creation[]): Promise<void> => {
       store.add(creation);
     }
     
-    await transaction.done;
-    console.log('✅ Successfully stored creations in IndexedDB:', creations.length);
+    // Wait for transaction to complete using Promise
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => {
+        console.log('✅ Successfully stored creations in IndexedDB:', creations.length);
+        resolve();
+      };
+      transaction.onerror = () => {
+        console.error('❌ Error storing creations in IndexedDB:', transaction.error);
+        reject(transaction.error);
+      };
+    });
   } catch (error) {
     console.error('❌ Error storing creations in IndexedDB:', error);
+    throw error;
   }
 };
-
 const getCreationsFromDB = async (): Promise<Creation[]> => {
   try {
     console.log('🏠 Checking IndexedDB for cached creations...');
