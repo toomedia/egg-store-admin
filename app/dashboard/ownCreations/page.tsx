@@ -514,15 +514,27 @@ const OwnCreations = () => {
   };
 
   const handleDeleteAsset = async () => {
-    if (!selectedImage) return;
+    if (!selectedImage) {
+      console.error('❌ No image selected for deletion');
+      showNotification('error', 'No image selected');
+      return;
+    }
     
     setDeleting(true);
     try {
-      const idParts = selectedImage.id.split('-');
-      const userId = idParts[0];
-      const imageIndex = parseInt(idParts[2]);
+      // Use creator_id directly instead of parsing ID (more reliable, especially with UUIDs)
+      const userId = selectedImage.creator_id || selectedImage.id.split('-')[0];
+      const targetImageUrl = selectedImage.image_url;
       
-      console.log('🗑️ Deleting asset for user:', userId, 'Image index:', imageIndex);
+      if (!userId) {
+        throw new Error('Unable to determine user ID');
+      }
+      
+      if (!targetImageUrl) {
+        throw new Error('Image URL is missing');
+      }
+      
+      console.log('🗑️ Deleting asset for user:', userId, 'Image URL:', targetImageUrl);
       
       // Fetch current user data
       const { data: userData, error: fetchError } = await supabase
@@ -532,6 +544,7 @@ const OwnCreations = () => {
         .single();
 
       if (fetchError) {
+        console.error('❌ Error fetching user data:', fetchError);
         throw fetchError;
       }
 
@@ -539,25 +552,58 @@ const OwnCreations = () => {
         throw new Error('User or generated images not found');
       }
 
-      let currentImages: any[] = [];
+      let generatedImagesData: any[] = [];
       
-      // Parse current generated_images
+      // Parse generated_images using the same logic as fetchFromSupabase
       if (typeof userData.generated_images === 'string') {
-        currentImages = JSON.parse(userData.generated_images);
-      } else if (Array.isArray(userData.generated_images)) {
-        currentImages = userData.generated_images;
+        try {
+          const parsed = JSON.parse(userData.generated_images);
+          
+          if (Array.isArray(parsed)) {
+            generatedImagesData = parsed;
+          } 
+          else if (parsed.generated_images && Array.isArray(parsed.generated_images)) {
+            generatedImagesData = parsed.generated_images;
+          }
+          else if (parsed.url || parsed.image_url) {
+            generatedImagesData = [parsed];
+          }
+        } catch (e) {
+          if (userData.generated_images.startsWith('http') || userData.generated_images.startsWith('data:')) {
+            generatedImagesData = [{ url: userData.generated_images, prompt: 'Generated image' }];
+          } else {
+            throw new Error('Failed to parse generated_images');
+          }
+        }
+      } else if (typeof userData.generated_images === 'object') {
+        if (Array.isArray(userData.generated_images)) {
+          generatedImagesData = userData.generated_images;
+        } else if (userData.generated_images.generated_images && Array.isArray(userData.generated_images.generated_images)) {
+          generatedImagesData = userData.generated_images.generated_images;
+        } else {
+          generatedImagesData = [userData.generated_images];
+        }
       }
 
-      // Remove the specific image
-      const updatedImages = currentImages.filter((_: any, index: number) => index !== imageIndex);
+      // Remove the specific image by matching URL (more reliable than index)
+      const updatedImages = generatedImagesData.filter((imgData: any) => {
+        const imageUrl = imgData.url || imgData.image_url;
+        return imageUrl !== targetImageUrl;
+      });
 
-      // Update user record
+      // Check if image was actually found and removed
+      if (updatedImages.length === generatedImagesData.length) {
+        console.warn('⚠️ Image not found in user data, but proceeding with local removal');
+      }
+
+      // Update user record with filtered images
       const { error: updateError } = await supabase
         .from('users')
         .update({ generated_images: updatedImages })
         .eq('id', userId);
 
       if (updateError) {
+        console.error('❌ Error updating user data:', updateError);
         throw updateError;
       }
 
@@ -565,7 +611,9 @@ const OwnCreations = () => {
       setCreations(prev => {
         const updated = prev.filter(creation => creation.id !== selectedImage.id);
         // Update IndexedDB
-        storeCreationsInDB(updated);
+        storeCreationsInDB(updated).catch(err => {
+          console.error('❌ Error updating IndexedDB:', err);
+        });
         return updated;
       });
       
@@ -574,7 +622,8 @@ const OwnCreations = () => {
       setShowDeleteConfirm(false);
     } catch (error) {
       console.error('❌ Error deleting asset:', error);
-      showNotification('error', 'Failed to delete asset');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete asset';
+      showNotification('error', `Failed to delete asset: ${errorMessage}`);
     } finally {
       setDeleting(false);
     }
@@ -963,16 +1012,30 @@ const OwnCreations = () => {
       )}
 
       {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
+      {showDeleteConfirm && selectedImage && (
         <div className="fixed inset-0 bg-black bg-opacity-75 z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Confirm Deletion</h3>
+            {selectedImage.image_url && (
+              <div className="relative w-full h-48 mb-4 bg-gray-100 rounded-lg overflow-hidden">
+                <Image
+                  src={selectedImage.image_url}
+                  alt={selectedImage.title || 'Creation'}
+                  fill
+                  className="object-contain"
+                  unoptimized
+                />
+              </div>
+            )}
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete this asset? This action cannot be undone.
             </p>
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  // Don't clear selectedImage here - let the user decide if they want to view the image
+                }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium rounded-lg border border-gray-300 hover:border-gray-400 transition-colors"
                 disabled={deleting}
               >
@@ -995,7 +1058,7 @@ const OwnCreations = () => {
         </div>
       )}
       
-      {selectedImage && (
+      {selectedImage && !showDeleteConfirm && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
           onClick={() => setSelectedImage(null)}
@@ -1271,18 +1334,32 @@ const OwnCreations = () => {
                   {/* Action Buttons - Only show when not in preset creation mode */}
                   {!presetCreationMode && (
                     <>
-                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                    <button 
-                          className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
+                      <div className="absolute top-1 right-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 flex gap-1 transition-opacity">
+                        <button 
+                          className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500 active:scale-95 transition-transform"
                           onClick={(e) => {
                             e.stopPropagation();
+                            e.preventDefault();
                             handleDownload(creation.id);
                           }}
                           title="Download"
                         >
                           <Download size={12} />
-                    </button>
-                </div>
+                        </button>
+                        <button 
+                          className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-red-500 active:scale-95 transition-transform"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            console.log('🗑️ Delete button clicked for:', creation.id);
+                            setSelectedImage(creation);
+                            setShowDeleteConfirm(true);
+                          }}
+                          title="Delete"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                 
                       {hasValidPrompt(creation) && (
                         <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity">
