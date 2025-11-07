@@ -222,7 +222,7 @@ const OwnCreations = () => {
       }
 
       console.log('✅ Processing Supabase data...');
-      const collectedCreations: Creation[] = [];
+              const collectedCreations: Creation[] = [];
       const seenImageUrls = new Set<string>();
 
       console.log('👥 Users to process:', data.length);
@@ -230,9 +230,9 @@ const OwnCreations = () => {
       for (const user of data) {
         const userId = user.id;
         const userEmail = user.email || 'Unknown User';
-
-        if (user.generated_images) {
-          try {
+                
+                if (user.generated_images) {
+                  try {
             let generatedImagesData: any[] = [];
             
             // Parse generated_images field
@@ -274,15 +274,15 @@ const OwnCreations = () => {
               if (imageUrl && typeof imageUrl === 'string' && !seenImageUrls.has(imageUrl)) {
                 seenImageUrls.add(imageUrl);
                 const creationId = `${userId}-generated_images-${index}-${Date.now()}`;
-                
-                collectedCreations.push({
+                          
+                          collectedCreations.push({
                   id: creationId,
-                  title: title,
+                            title: title,
                   image_url: imageUrl,
                   prompt: prompt,
                   source: 'generated_images',
                   creator_id: userId,
-                  creator: {
+                            creator: {
                     id: userId,
                     name: userEmail,
                     avatar_url: null
@@ -308,7 +308,7 @@ const OwnCreations = () => {
         creations: collectedCreations, 
         hasMore: data.length === batchSize 
       };
-    } catch (error) {
+                  } catch (error) {
       console.error('💥 Error in fetchFromSupabase:', error);
       setSyncStatus('error');
       return { creations: [], hasMore: false };
@@ -451,13 +451,13 @@ const OwnCreations = () => {
           setLoading(false);
           
           // Extract tags
-          const tagsSet = new Set<string>();
+        const tagsSet = new Set<string>();
           dbCreations.forEach(creation => {
-            if (creation.tags && Array.isArray(creation.tags)) {
-              creation.tags.forEach((tag: string) => tagsSet.add(tag));
-            }
-          });
-          setAllTags(Array.from(tagsSet));
+          if (creation.tags && Array.isArray(creation.tags)) {
+            creation.tags.forEach((tag: string) => tagsSet.add(tag));
+          }
+        });
+        setAllTags(Array.from(tagsSet));
         }
         
         // STEP 2: Sync with Supabase for fresh data
@@ -581,12 +581,39 @@ const OwnCreations = () => {
   };
 
   // Preset creation functions
+  const MAX_EGGS = 12;
+  
   const togglePresetSelection = (creationId: string) => {
-    setSelectedForPreset(prev => 
-      prev.includes(creationId) 
-        ? prev.filter(id => id !== creationId)
-        : [...prev, creationId]
-    );
+    setSelectedForPreset(prev => {
+      if (prev.includes(creationId)) {
+        // Deselect
+        return prev.filter(id => id !== creationId);
+      } else {
+        // Select only if under limit
+        if (prev.length >= MAX_EGGS) {
+          showNotification('error', `Maximum ${MAX_EGGS} eggs can be selected`);
+          return prev;
+        }
+        return [...prev, creationId];
+      }
+    });
+  };
+
+  const autoSelectEggs = () => {
+    const availableEggs = filteredCreations.filter(creation => !selectedForPreset.includes(creation.id));
+    const eggsToSelect = availableEggs.slice(0, MAX_EGGS - selectedForPreset.length);
+    
+    if (eggsToSelect.length === 0) {
+      showNotification('info', 'No more eggs available to select');
+      return;
+    }
+    
+    setSelectedForPreset(prev => {
+      const newSelection = [...prev, ...eggsToSelect.map(egg => egg.id)];
+      return newSelection.slice(0, MAX_EGGS); // Ensure we don't exceed limit
+    });
+    
+    showNotification('success', `Auto-selected ${eggsToSelect.length} egg(s)`);
   };
 
   const startPresetCreation = () => {
@@ -610,6 +637,11 @@ const OwnCreations = () => {
   const createPresetFromSelection = async () => {
     if (selectedForPreset.length === 0) {
       showNotification('error', 'Please select at least one image for the preset');
+      return;
+    }
+
+    if (selectedForPreset.length > MAX_EGGS) {
+      showNotification('error', `Maximum ${MAX_EGGS} eggs can be selected`);
       return;
     }
 
@@ -667,6 +699,11 @@ const OwnCreations = () => {
   const handleMakeLive = async () => {
     if (selectedForPreset.length === 0) {
       showNotification('error', 'Please select at least one image for the preset');
+      return;
+    }
+
+    if (selectedForPreset.length > MAX_EGGS) {
+      showNotification('error', `Maximum ${MAX_EGGS} eggs can be selected`);
       return;
     }
 
@@ -733,18 +770,18 @@ const OwnCreations = () => {
   const filteredCreations = useMemo(() => {
     return creations
       .filter(creation => {
-        const title = creation.title || '';
+      const title = creation.title || '';
         const prompt = creation.prompt || '';
-        const tags = Array.isArray(creation.tags) ? creation.tags : [];
-        
-        const matchesSearch = 
-          title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      const tags = Array.isArray(creation.tags) ? creation.tags : [];
+      
+      const matchesSearch = 
+        title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           prompt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-        
-        const matchesTag = 
-          tagFilter === 'all' || 
-          tags.includes(tagFilter);
+        tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesTag = 
+        tagFilter === 'all' || 
+        tags.includes(tagFilter);
 
         const matchesSource = 
           sourceFilter === 'all' || 
@@ -1058,7 +1095,7 @@ const OwnCreations = () => {
                   disabled={selectedForPreset.length === 0}
                 >
                   <PlusCircle className="mr-2" size={18} />
-                  Create Draft ({selectedForPreset.length})
+                  Create Draft ({selectedForPreset.length}/{MAX_EGGS})
                 </button>
                 <button 
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg flex items-center disabled:opacity-50"
@@ -1075,16 +1112,16 @@ const OwnCreations = () => {
               </>
             ) : (
               <>
-                <button 
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                  onClick={refreshCreations}
-                  disabled={loading}
-                >
-                  <RefreshCw className={loading ? "animate-spin" : ""} size={18} />
-                  Refresh
-                </button>
-                <button 
-                  className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
+            <button 
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              onClick={refreshCreations}
+              disabled={loading}
+            >
+              <RefreshCw className={loading ? "animate-spin" : ""} size={18} />
+              Refresh
+            </button>
+            <button 
+              className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
                   onClick={startPresetCreation}
                 >
                   <PlusCircle className="mr-2" size={18} />
@@ -1092,11 +1129,11 @@ const OwnCreations = () => {
                 </button>
                 <button 
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg flex items-center"
-                  onClick={handleDownloadAll}
-                >
-                  <Download className="mr-2" size={18} />
-                  Download All
-                </button>
+              onClick={handleDownloadAll}
+            >
+              <Download className="mr-2" size={18} />
+              Download All
+            </button>
               </>
             )}
           </div>
@@ -1130,35 +1167,22 @@ const OwnCreations = () => {
                   placeholder="Frühlingsblumen Kollektion"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description (English) - Optional</label>
-                <textarea
-                  value={presetFormData.descEn}
-                  onChange={(e) => setPresetFormData(prev => ({ ...prev, descEn: e.target.value }))}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
-                  placeholder="A beautiful collection of spring flower designs"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description (German) - Optional</label>
-                <textarea
-                  value={presetFormData.descDe}
-                  onChange={(e) => setPresetFormData(prev => ({ ...prev, descDe: e.target.value }))}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
-                  placeholder="Eine wunderschöne Kollektion von Frühlingsblumen-Designs"
-                />
-              </div>
+
             </div>
-            <div className="mt-3 text-sm text-gray-700">
-              <CheckCircle className="inline mr-1" size={16} />
-              Selected {selectedForPreset.length} eggs for preset • 
-              Will create {selectedForPreset.length * 2} cards (matching pairs)
-            </div>
-            <div className="mt-2 text-xs text-gray-500">
-              <strong>Create Draft:</strong> Creates preset as draft for later review • 
-              <strong> Make Live:</strong> Publishes preset immediately with approved status
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-blue-800">
+                  <CheckCircle className="inline mr-1" size={16} />
+                  Selected {selectedForPreset.length}/{MAX_EGGS} eggs for preset 
+                </p>
+                <button
+                  onClick={autoSelectEggs}
+                  disabled={selectedForPreset.length >= MAX_EGGS}
+                  className="px-3 py-1.5 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Auto Select {selectedForPreset.length < MAX_EGGS ? `(${MAX_EGGS - selectedForPreset.length} remaining)` : ''}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1248,7 +1272,7 @@ const OwnCreations = () => {
                   {!presetCreationMode && (
                     <>
                       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                        <button 
+                    <button 
                           className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1257,9 +1281,9 @@ const OwnCreations = () => {
                           title="Download"
                         >
                           <Download size={12} />
-                        </button>
-                      </div>
-                      
+                    </button>
+                </div>
+                
                       {hasValidPrompt(creation) && (
                         <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button 
@@ -1272,12 +1296,12 @@ const OwnCreations = () => {
                           >
                             <MessageSquare size={12} />
                           </button>
-                        </div>
+                    </div>
                       )}
                     </>
                   )}
-                </div>
-                
+                  </div>
+                  
                 <div className="p-2">
                   {creation.prompt ? (
                     <div className="text-xs text-gray-600 truncate" title={creation.prompt}>
@@ -1291,7 +1315,7 @@ const OwnCreations = () => {
           
           {hasMoreToShow && (
             <div className="flex justify-center mt-6">
-              <button
+                <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
                 className="px-6 py-3 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1307,8 +1331,8 @@ const OwnCreations = () => {
                     <ChevronDown size={18} />
                   </>
                 )}
-              </button>
-            </div>
+                </button>
+              </div>
           )}
           {!hasMoreToShow && filteredCreations.length > 0 && (
             <div className="text-center mt-6 text-gray-500 text-sm">
