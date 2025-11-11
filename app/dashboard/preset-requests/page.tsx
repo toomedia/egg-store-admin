@@ -79,6 +79,21 @@ interface UserInfo {
   username?: string;
 }
 
+// Modal interfaces
+interface ApprovalModalData {
+  presetId: string;
+  presetName: string;
+  germanTitle: string;
+  germanDescription: string;
+  adminNotes: string;
+}
+
+interface RejectionModalData {
+  presetId: string;
+  presetName: string;
+  rejectionReason: string;
+}
+
 // IndexedDB constants
 const DB_NAME = 'PresetsDB';
 const STORE_NAME = 'presets';
@@ -176,6 +191,159 @@ const SafeImage = ({ src, alt, className }: { src: string, alt: string, classNam
   );
 };
 
+// Modal Components
+const ApprovalModal = ({ 
+  isOpen, 
+  onClose, 
+  onApprove, 
+  presetName 
+}: { 
+  isOpen: boolean;
+  onClose: () => void;
+  onApprove: (data: { germanTitle: string }) => void;
+  presetName: string;
+}) => {
+  const [germanTitle, setGermanTitle] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!germanTitle.trim()) {
+      alert("German title is required.");
+      return;
+    }
+    onApprove({ germanTitle });
+    setGermanTitle('');
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-white/50 bg-opacity-40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Approve Preset</h2>
+          <p className="text-gray-600 mb-4">
+            Approve preset: <span className="font-semibold">{presetName}</span>
+          </p>
+          
+          <form onSubmit={handleSubmit}>
+            <div className="mb-4">
+              <label htmlFor="germanTitle" className="block text-sm font-medium text-gray-700 mb-1">
+                German Title *
+              </label>
+              <input
+                type="text"
+                id="germanTitle"
+                value={germanTitle}
+                onChange={(e) => setGermanTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
+                placeholder="Enter German title"
+                required
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setGermanTitle('');
+                  onClose();
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 flex items-center"
+              >
+                <CheckCircle className="mr-2" size={16} />
+                Approve Preset
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RejectionModal = ({ 
+  isOpen, 
+  onClose, 
+  onReject, 
+  presetName 
+}: { 
+  isOpen: boolean;
+  onClose: () => void;
+  onReject: (data: { rejectionReason: string }) => void;
+  presetName: string;
+}) => {
+  const [rejectionReason, setRejectionReason] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectionReason.trim()) {
+      alert("Rejection reason is required.");
+      return;
+    }
+    onReject({ rejectionReason });
+    setRejectionReason('');
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-white/50 bg-opacity-80 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Reject Preset</h2>
+          <p className="text-gray-600 mb-4">
+            Reject preset: <span className="font-semibold">{presetName}</span>
+          </p>
+          
+          <form onSubmit={handleSubmit}>
+            <div className="mb-4">
+              <label htmlFor="rejectionReason" className="block text-sm font-medium text-gray-700 mb-1">
+                Reason for Rejection *
+              </label>
+              <textarea
+                id="rejectionReason"
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
+                placeholder="Please provide reason for rejection..."
+                required
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectionReason('');
+                  onClose();
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 flex items-center"
+              >
+                <XCircle className="mr-2" size={16} />
+                Reject Preset
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Page = () => {
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get('q') || '';
@@ -189,6 +357,18 @@ const Page = () => {
   const [dataSource, setDataSource] = useState<string>('');
   const [userInfo, setUserInfo] = useState<{ [key: string]: UserInfo }>({});
   
+  // Modal states
+  const [approvalModal, setApprovalModal] = useState<{ isOpen: boolean; presetId: string; presetName: string }>({
+    isOpen: false,
+    presetId: '',
+    presetName: ''
+  });
+  const [rejectionModal, setRejectionModal] = useState<{ isOpen: boolean; presetId: string; presetName: string }>({
+    isOpen: false,
+    presetId: '',
+    presetName: ''
+  });
+
   // ONLY show pending_approval presets by default
   const [statusFilter, setStatusFilter] = useState<'pending_approval'>('pending_approval');
 
@@ -228,7 +408,7 @@ const Page = () => {
     setFilteredPreset(filtered);
   }, [preset, searchQuery]);
 
-  // Fetch user info for creators - IMPROVED VERSION
+  // Fetch user info for creators
   const fetchUserInfo = async (userId: string) => {
     if (!userId || userInfo[userId]) return;
     
@@ -392,131 +572,118 @@ const Page = () => {
     };
   }, [currentView]);
 
-// Handle preset approval with localhost API
-const handleApprovePreset = async (presetId: string) => {
-  if (!confirm("Are you sure you want to approve this preset? It will become publicly visible.")) {
-    return;
-  }
-
-  setIsLoading(true);
-  
-  try {
-    const germanTitle = prompt("Please enter German title for this preset:");
-    const germanDescription = prompt("Please enter German description for this preset:");
+  // Handle preset approval with modal
+  const handleApprovePreset = async (data: { germanTitle: string }) => {
+    const { germanTitle } = data;
+    const presetId = approvalModal.presetId;
     
-    if (!germanTitle || !germanDescription) {
-      alert("German title and description are required for approval.");
-      setIsLoading(false);
+    if (!germanTitle.trim()) {
+      alert("German title is required.");
       return;
     }
 
-    const adminNotes = prompt("Optional admin notes for the author:") || '';
-
-    // Get creator information for email
-    const presetToUpdate = preset.find(p => p.id === presetId);
-    if (!presetToUpdate) {
-      alert("Preset not found.");
-      setIsLoading(false);
-      return;
-    }
-
-    const creatorInfo = userInfo[presetToUpdate.created_by];
-    const creatorEmail = creatorInfo?.email;
+    setIsLoading(true);
     
-    console.log("Creator info:", creatorInfo);
-    console.log("Creator email:", creatorEmail);
-    
-    // Try localhost API first for email
-    if (creatorEmail && creatorEmail !== 'Email not available' && creatorEmail !== 'Error loading email' && creatorEmail !== 'Loading email...') {
-      try {
-        console.log("Attempting to send email to:", creatorEmail);
-        
-        // ✅ YEH LINE ADD KARO - Get preset images for email
-        const presetImages = presetToUpdate.preset_images || [];
-        
-        const response = await fetch('https://egg-store-admin.vercel.app/api/responseemail', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+    try {
+      const presetToUpdate = preset.find(p => p.id === presetId);
+      if (!presetToUpdate) {
+        alert("Preset not found.");
+        setIsLoading(false);
+        return;
+      }
+
+      const creatorInfo = userInfo[presetToUpdate.created_by];
+      const creatorEmail = creatorInfo?.email;
+      
+      console.log("Creator info:", creatorInfo);
+      console.log("Creator email:", creatorEmail);
+      
+      // Try to send email if creator email is available
+      if (creatorEmail && creatorEmail !== 'Email not available' && creatorEmail !== 'Error loading email' && creatorEmail !== 'Loading email...') {
+        try {
+          console.log("Attempting to send email to:", creatorEmail);
+          
+          const presetImages = presetToUpdate.preset_images || [];
+          
+          const response = await fetch('https://egg-store-admin.vercel.app/api/responseemail', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'approve',
+              presetId: presetId,
+              germanTitle: germanTitle,
+              germanDescription: '', // No longer required
+              adminNotes: '', // No longer required
+              authorEmail: creatorEmail,
+              presetImages: presetImages
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const result = await response.json();
+          
+          if (result.success) {
+            console.log("✅ Email sent successfully to:", creatorEmail);
+          } else {
+            console.log("❌ Email API returned error:", result.message);
+          }
+        } catch (apiError) {
+          console.log("❌ Email API failed:", apiError);
+          // Continue with approval even if email fails
+        }
+      } else {
+        console.log("❌ Cannot send email: Creator email not available or invalid");
+      }
+
+      // Update preset in Supabase
+      const { data: updateData, error } = await supabase
+        .from('presets')
+        .update({
+          preset_status: 'approved',
+          is_public: true,
+          preset_name: {
+            en_name: presetToUpdate.preset_name?.en_name || germanTitle,
+            de_name: germanTitle
           },
-          body: JSON.stringify({
-            action: 'approve',
-            presetId: presetId,
-            germanTitle: germanTitle,
-            germanDescription: germanDescription,
-            adminNotes: adminNotes,
-            authorEmail: creatorEmail,
-            presetImages: presetImages // ✅ YEH ADD KARO
-          })
-        });
+          preset_desc: presetToUpdate.preset_desc || { en_desc: '', de_desc: '' }, // Keep existing or empty
+          approved_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', presetId)
+        .select();
 
-        // Check if response is ok
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+      if (error) {
+        console.error("Direct Supabase update error:", error);
+        alert(`Failed to approve preset: ${error.message}`);
+      } else {
+        alert("Preset approved successfully!");
+        // Refresh the list
+        const { data: updatedData } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
+        if (updatedData) {
+          setPreset(updatedData);
         }
-
-        const result = await response.json();
-        
-        if (result.success) {
-          console.log("✅ Email sent successfully to:", creatorEmail);
-          console.log(`📸 ${presetImages.length} images included in email`);
-        } else {
-          console.log("❌ Email API returned error:", result.message);
-        }
-      } catch (apiError) {
-        console.log("❌ Localhost API failed, email not sent:", apiError);
-        // Continue with approval even if email fails
       }
-    } else {
-      console.log("❌ Cannot send email: Creator email not available or invalid");
-      console.log("Available creator info:", creatorInfo);
+
+    } catch (error) {
+      console.error("Error approving preset:", error);
+      alert("Error approving preset. Please try again.");
+    } finally {
+      setIsLoading(false);
+      setApprovalModal({ isOpen: false, presetId: '', presetName: '' });
     }
+  };
 
-    // Update preset in Supabase (always do this regardless of email success)
-    const { data, error } = await supabase
-      .from('presets')
-      .update({
-        preset_status: 'approved',
-        is_public: true,
-        preset_name: {
-          en_name: presetToUpdate.preset_name?.en_name || germanTitle,
-          de_name: germanTitle
-        },
-        preset_desc: {
-          en_desc: presetToUpdate.preset_desc?.en_desc || '',
-          de_desc: germanDescription
-        },
-        admin_notes: adminNotes,
-        approved_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', presetId)
-      .select();
-
-    if (error) {
-      console.error("Direct Supabase update error:", error);
-      alert(`Failed to approve preset: ${error.message}`);
-    } else {
-      alert("Preset approved successfully!");
-      // Refresh the list
-      const { data: updatedData } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
-      if (updatedData) {
-        setPreset(updatedData);
-      }
-    }
-
-  } catch (error) {
-    console.error("Error approving preset:", error);
-    alert("Error approving preset. Please try again.");
-  } finally {
-    setIsLoading(false);
-  }
-};
-  // Handle preset rejection with localhost API
-  const handleRejectPreset = async (presetId: string) => {
-    const rejectionReason = prompt("Please provide reason for rejection:");
+  // Handle preset rejection with modal
+  const handleRejectPreset = async (data: { rejectionReason: string }) => {
+    const { rejectionReason } = data;
+    const presetId = rejectionModal.presetId;
     
-    if (!rejectionReason) {
+    if (!rejectionReason.trim()) {
       alert("Rejection reason is required.");
       return;
     }
@@ -524,7 +691,6 @@ const handleApprovePreset = async (presetId: string) => {
     setIsLoading(true);
     
     try {
-      // Get creator information for email
       const presetToUpdate = preset.find(p => p.id === presetId);
       if (!presetToUpdate) {
         alert("Preset not found.");
@@ -536,48 +702,46 @@ const handleApprovePreset = async (presetId: string) => {
       const creatorEmail = creatorInfo?.email;
       
       console.log("Creator info for rejection:", creatorInfo);
-      console.log("Creator email for rejection:", creatorEmail);
 
-      // Try localhost API first for email
-   if (creatorEmail && creatorEmail !== 'Email not available' && creatorEmail !== 'Error loading email' && creatorEmail !== 'Loading email...') {
-  try {
-    console.log("Attempting to send rejection email to:", creatorEmail);
-    
-    // Get preset images for rejection email bhi if needed
-    const presetImages = presetToUpdate.preset_images || [];
-    
-    const response = await fetch('http://localhost:8000/api/responseemail', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'reject',
-        presetId: presetId,
-        rejectionReason: rejectionReason,
-        authorEmail: creatorEmail,
-        presetImages: presetImages // Images bhi include karo
-      })
-    });
+      // Try to send rejection email if creator email is available
+      if (creatorEmail && creatorEmail !== 'Email not available' && creatorEmail !== 'Error loading email' && creatorEmail !== 'Loading email...') {
+        try {
+          console.log("Attempting to send rejection email to:", creatorEmail);
+          
+          const presetImages = presetToUpdate.preset_images || [];
+          
+          const response = await fetch('https://egg-store-admin.vercel.app/api/responseemail', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'reject',
+              presetId: presetId,
+              rejectionReason: rejectionReason,
+              authorEmail: creatorEmail,
+              presetImages: presetImages
+            })
+          });
 
-    // Check if response is ok
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
 
-    const result = await response.json();
-    
-    if (result.success) {
-      console.log("✅ Rejection email sent successfully to:", creatorEmail);
-    } else {
-      throw new Error(result.message);
-    }
-  } catch (apiError) {
-    console.log("❌ Localhost API failed, email not sent:", apiError);
-    // Continue with rejection even if email fails
-  }
-}
-      // Update preset in Supabase (always do this regardless of email success)
+          const result = await response.json();
+          
+          if (result.success) {
+            console.log("✅ Rejection email sent successfully to:", creatorEmail);
+          } else {
+            throw new Error(result.message);
+          }
+        } catch (apiError) {
+          console.log("❌ Email API failed:", apiError);
+          // Continue with rejection even if email fails
+        }
+      }
+
+      // Update preset in Supabase
       const { data, error } = await supabase
         .from('presets')
         .update({
@@ -606,7 +770,26 @@ const handleApprovePreset = async (presetId: string) => {
       alert("Error rejecting preset. Please try again.");
     } finally {
       setIsLoading(false);
+      setRejectionModal({ isOpen: false, presetId: '', presetName: '' });
     }
+  };
+
+  // Open approval modal
+  const openApprovalModal = (presetId: string, presetName: string) => {
+    setApprovalModal({
+      isOpen: true,
+      presetId,
+      presetName
+    });
+  };
+
+  // Open rejection modal
+  const openRejectionModal = (presetId: string, presetName: string) => {
+    setRejectionModal({
+      isOpen: true,
+      presetId,
+      presetName
+    });
   };
 
   // Get status badge
@@ -742,7 +925,7 @@ const handleApprovePreset = async (presetId: string) => {
         if (checkError || !existingPreset) {
           error = { message: 'Preset not found. It may have been deleted.' };
         } else {
-          // Update existing preset - ONLY EXISTING COLUMNS USE करें
+          // Update existing preset
           const updateData = {
             preset_name: {
               en_name: formData.titleEn,
@@ -772,7 +955,7 @@ const handleApprovePreset = async (presetId: string) => {
           }
         }
       } else {
-        // Create new preset - ONLY EXISTING COLUMNS USE करें
+        // Create new preset
         const insertData = {
           preset_name: {
             en_name: formData.titleEn,
@@ -1012,7 +1195,7 @@ const handleApprovePreset = async (presetId: string) => {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="title-en" className="block text-sm font-medium text-gray-700 mb-1">Title (English)</label>
+                <label htmlFor="title-en" className="block text-sm font-medium text-gray-700 mb-1">Title (English) *</label>
                 <input 
                   required 
                   onChange={handleInputChange} 
@@ -1025,7 +1208,7 @@ const handleApprovePreset = async (presetId: string) => {
                 />
               </div>
               <div>
-                <label htmlFor="title-de" className="block text-sm font-medium text-gray-700 mb-1">Title (German)</label>
+                <label htmlFor="title-de" className="block text-sm font-medium text-gray-700 mb-1">Title (German) *</label>
                 <input 
                   required 
                   onChange={handleInputChange} 
@@ -1040,15 +1223,15 @@ const handleApprovePreset = async (presetId: string) => {
             </div>
           </div>
       
-          {/* Descriptions Section */}
+          {/* Descriptions Section - Optional */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
               <Edit className="text-[#e6d281] mr-2" size={20} />
-              Descriptions
+              Descriptions (Optional)
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="desc-en" className="block text-sm font-medium text-gray-700 mb-1">Description (English) - Optional</label>
+                <label htmlFor="desc-en" className="block text-sm font-medium text-gray-700 mb-1">Description (English)</label>
                 <textarea 
                   onChange={handleInputChange} 
                   id="desc-en" 
@@ -1060,7 +1243,7 @@ const handleApprovePreset = async (presetId: string) => {
                 ></textarea>
               </div>
               <div>
-                <label htmlFor="desc-de" className="block text-sm font-medium text-gray-700 mb-1">Description (German) - Optional</label>
+                <label htmlFor="desc-de" className="block text-sm font-medium text-gray-700 mb-1">Description (German)</label>
                 <textarea 
                   onChange={handleInputChange} 
                   id="desc-de" 
@@ -1303,6 +1486,21 @@ const handleApprovePreset = async (presetId: string) => {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Modals */}
+      <ApprovalModal
+        isOpen={approvalModal.isOpen}
+        onClose={() => setApprovalModal({ isOpen: false, presetId: '', presetName: '' })}
+        onApprove={handleApprovePreset}
+        presetName={approvalModal.presetName}
+      />
+      
+      <RejectionModal
+        isOpen={rejectionModal.isOpen}
+        onClose={() => setRejectionModal({ isOpen: false, presetId: '', presetName: '' })}
+        onReject={handleRejectPreset}
+        presetName={rejectionModal.presetName}
+      />
+
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
           <div className='mb-4 md:mb-0'>
@@ -1377,7 +1575,7 @@ const handleApprovePreset = async (presetId: string) => {
                         {item.preset_status === 'pending_approval' && (
                           <div className="flex gap-2">
                             <button 
-                              onClick={() => handleApprovePreset(item.id)} 
+                              onClick={() => openApprovalModal(item.id, item.preset_name?.en_name || 'Untitled Preset')} 
                               disabled={isLoading}
                               className="px-3 py-1.5 bg-green-50 text-green-600 hover:bg-green-100 rounded-md text-sm font-medium flex items-center"
                             >
@@ -1385,7 +1583,7 @@ const handleApprovePreset = async (presetId: string) => {
                               {isLoading ? 'Approving...' : 'Approve'}
                             </button>
                             <button 
-                              onClick={() => handleRejectPreset(item.id)} 
+                              onClick={() => openRejectionModal(item.id, item.preset_name?.en_name || 'Untitled Preset')} 
                               disabled={isLoading}
                               className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-sm font-medium flex items-center"
                             >

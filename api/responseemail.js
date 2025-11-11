@@ -55,7 +55,7 @@ app.post('/api/responseemail', async (req, res) => {
   try {
     console.log('📧 Received email request:', req.body);
     
-    const { presetId, action, adminNotes, rejectionReason, germanTitle, germanDescription, authorEmail, presetImages } = req.body;
+    const { presetId, action, adminNotes, rejectionReason, germanTitle, authorEmail, presetImages } = req.body;
 
     // Validate required fields
     if (!presetId || !action) {
@@ -206,8 +206,7 @@ app.post('/api/responseemail', async (req, res) => {
                         <div class="info-label">German Title:</div>
                         <div class="info-value">${germanTitle || 'N/A'}</div>
                         
-                        <div class="info-label">German Description:</div>
-                        <div class="info-value">${germanDescription || 'N/A'}</div>
+                      
                     </div>
 
                     ${imagesHtml}
