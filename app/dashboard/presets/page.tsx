@@ -931,32 +931,6 @@ const getStatusBadge = (status: string) => {
     }
   };
 
-  // Modified handleSubmit - Now only validates and shows message, doesn't save to database
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const activeImages = formData.images.filter(img => !img.markedForDeletion);
-    
-    if (activeImages.length === 0) {
-      alert("Please upload at least one image.");
-      return;
-    }
-
-    const requiredUniqueImages = Math.ceil(parseInt(String(formData.size.value)) / 2);
-    if (activeImages.length !== requiredUniqueImages) {
-      alert(`For a matching pairs game, you need exactly ${requiredUniqueImages} unique images (which will be duplicated to create ${formData.size.value} cards). Currently you have ${activeImages.length} images.`);
-      return;
-    }
-
-    // Show message that preset is ready but not saved
-    alert("Preset is ready! Click 'Make Live' to publish it to the presets.");
-    
-    // Clean up object URLs if there are any file objects
-    formData.images.forEach(img => {
-      if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
-    });
-  };
-
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this preset?")) {
       return;
@@ -1070,140 +1044,6 @@ const getStatusBadge = (status: string) => {
   if (currentView === 'create') {
     return (
       <div className="container mx-auto px-4 py-8 font-manrope">
-        {/* Egg Selection Modal */}
-        {/* {showEggModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                    <Grid className="text-[#e6d281] mr-2" size={24} />
-                    Select from Existing Eggs
-                  </h2>
-                  <button 
-                    onClick={() => {
-                      setShowEggModal(false);
-                      setSelectedEggs([]);
-                      setEggSearchQuery('');
-                    }}
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-                <p className="text-gray-600 mt-2">
-                  Select eggs from your existing creations. Selected eggs will be added to your preset.
-                </p>
-                
-                <div className="mt-4 flex flex-col sm:flex-row gap-4">
-                  <div className="relative flex-1">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Search className="text-gray-400" size={16} />
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Search eggs by prompt or tags..."
-                      className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
-                      value={eggSearchQuery}
-                      onChange={(e) => setEggSearchQuery(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-600">
-                      {selectedEggs.length} selected
-                    </span>
-                    <button
-                      onClick={refreshEggsFromSupabase}
-                      disabled={loadingEggs}
-                      className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm flex items-center disabled:opacity-50"
-                      title="Refresh from Supabase"
-                    >
-                      <Loader2 className={`mr-1 ${loadingEggs ? 'animate-spin' : ''}`} size={14} />
-                      Refresh
-                    </button>
-                    <button
-                      onClick={handleAddSelectedEggs}
-                      disabled={selectedEggs.length === 0}
-                      className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Add Selected Eggs
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-2 text-xs text-gray-500 flex items-center">
-                  <CheckCircle className="mr-1" size={12} />
-                  Loaded from {eggsSource} • {availableEggs.length} eggs available
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-auto p-6">
-                {loadingEggs ? (
-                  <div className="flex justify-center items-center h-32">
-                    <Loader2 className="animate-spin text-[#e6d281]" size={32} />
-                    <span className="ml-2 text-gray-600">Loading eggs...</span>
-                  </div>
-                ) : filteredEggs.length === 0 ? (
-                  <div className="text-center py-8">
-                    <ImageIcon className="mx-auto text-gray-400 mb-4" size={48} />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No eggs found</h3>
-                    <p className="text-gray-500">
-                      {eggSearchQuery ? 'Try a different search term' : 'No eggs available in your creations'}
-                    </p>
-                    <button
-                      onClick={refreshEggsFromSupabase}
-                      className="mt-4 px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 rounded-lg"
-                    >
-                      Refresh from Supabase
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                    {filteredEggs.map((egg) => (
-                      <div
-                        key={egg.id}
-                        className={`relative group cursor-pointer border-2 rounded-lg overflow-hidden transition-all ${
-                          selectedEggs.includes(egg.id) 
-                            ? 'border-[#e6d281] ring-2 ring-[#e6d281] ring-opacity-30' 
-                            : 'border-gray-200 hover:border-[#e6d281]'
-                        }`}
-                        onClick={() => toggleEggSelection(egg.id)}
-                      >
-                        <div className="aspect-square relative">
-                          <Image
-                            src={egg.image_url}
-                            alt={egg.prompt || 'Egg creation'}
-                            fill
-                            className="object-cover"
-                            loading="lazy"
-                          />
-                          <div className={`absolute top-2 right-2 p-1 rounded-full ${
-                            selectedEggs.includes(egg.id) 
-                              ? 'bg-[#e6d281] text-gray-800' 
-                              : 'bg-white bg-opacity-80 text-gray-600'
-                          }`}>
-                            {selectedEggs.includes(egg.id) ? (
-                              <CheckSquare size={16} />
-                            ) : (
-                              <Square size={16} />
-                            )}
-                          </div>
-                        </div>
-                        {egg.prompt && (
-                          <div className="p-2 bg-white bg-opacity-90">
-                            <p className="text-xs text-gray-600 truncate" title={egg.prompt}>
-                              {egg.prompt.length > 50 ? `${egg.prompt.substring(0, 50)}...` : egg.prompt}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-         */}
         <div 
           onClick={() => {
             setCurrentView('list');
@@ -1237,13 +1077,13 @@ const getStatusBadge = (status: string) => {
           </div>
           <p className="text-gray-600">
             {editingId 
-              ? 'Update the preset information below.' 
-              : 'Fill out the form below to create a new egg card preset. Use "Make Live" to publish it.'
+              ? 'Update the preset information below and click "Make Live" to publish changes.' 
+              : 'Fill out the form below to create a new egg card preset. Use "Make Live" to publish it immediately.'
             }
           </p>
         </div>
 
-        <form className="space-y-6" onSubmit={handleSubmit}>
+        <form className="space-y-6" onSubmit={handleMakeLive}>
           {/* Titles Section */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
@@ -1387,16 +1227,6 @@ const getStatusBadge = (status: string) => {
             </h2>
             
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              {/* <button
-                type="button"
-                onClick={handleOpenEggModal}
-                disabled={!formData.size.value}
-                className="px-4 py-3 border-2 border-[#e6d281] text-[#e6d281] hover:bg-[#e6d281] hover:text-gray-800 font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:border-gray-400 disabled:text-gray-400 disabled:hover:bg-transparent flex items-center justify-center w-full sm:w-auto"
-              >
-                <Grid className="mr-2" size={18} />
-                Select from Existing Eggs
-              </button>
-               */}
               <div 
                 className="flex-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-[#e6d281] transition-colors cursor-pointer"
                 onClick={() => {
@@ -1524,8 +1354,7 @@ const getStatusBadge = (status: string) => {
 
             {/* Make Live Button - For both new and edit modes */}
             <button 
-              type="button"
-              onClick={handleMakeLive}
+              type="submit"
               disabled={isLoading || (!!formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2))}
               className="px-4 py-2 border border-transparent rounded-md text-sm font-medium bg-green-600 hover:bg-green-700 text-white cursor-pointer transition-colors flex items-center justify-center disabled:opacity-50"
             >
@@ -1535,19 +1364,6 @@ const getStatusBadge = (status: string) => {
                 <Globe className="mr-2" size={16} />
               )}
               {isLoading ? 'Publishing...' : (editingId ? 'Update & Make Live' : 'Make Live')}
-            </button>
-
-            <button 
-              type="submit"
-              disabled={isLoading || (!!formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2))}
-              className="px-4 py-2 border border-transparent rounded-md text-sm font-medium bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 cursor-pointer transition-colors flex items-center justify-center disabled:opacity-50"
-            >
-              {isLoading ? (
-                <Loader2 className="mr-2 animate-spin" size={16} />
-              ) : (
-                <PlusCircle className="mr-2" size={16} />
-              )}
-              {isLoading ? (editingId ? 'Updating...' : 'Creating...') : (editingId ? 'Update Preset' : 'Create Preset')}
             </button>
           </div>
           

@@ -101,6 +101,7 @@ const storeCreationsInDB = async (creations: Creation[]): Promise<void> => {
     throw error;
   }
 };
+
 const getCreationsFromDB = async (): Promise<Creation[]> => {
   try {
     console.log('🏠 Checking IndexedDB for cached creations...');
@@ -222,7 +223,7 @@ const OwnCreations = () => {
       }
 
       console.log('✅ Processing Supabase data...');
-              const collectedCreations: Creation[] = [];
+      const collectedCreations: Creation[] = [];
       const seenImageUrls = new Set<string>();
 
       console.log('👥 Users to process:', data.length);
@@ -231,8 +232,8 @@ const OwnCreations = () => {
         const userId = user.id;
         const userEmail = user.email || 'Unknown User';
                 
-                if (user.generated_images) {
-                  try {
+        if (user.generated_images) {
+          try {
             let generatedImagesData: any[] = [];
             
             // Parse generated_images field
@@ -275,14 +276,14 @@ const OwnCreations = () => {
                 seenImageUrls.add(imageUrl);
                 const creationId = `${userId}-generated_images-${index}-${Date.now()}`;
                           
-                          collectedCreations.push({
+                collectedCreations.push({
                   id: creationId,
-                            title: title,
+                  title: title,
                   image_url: imageUrl,
                   prompt: prompt,
                   source: 'generated_images',
                   creator_id: userId,
-                            creator: {
+                  creator: {
                     id: userId,
                     name: userEmail,
                     avatar_url: null
@@ -308,7 +309,7 @@ const OwnCreations = () => {
         creations: collectedCreations, 
         hasMore: data.length === batchSize 
       };
-                  } catch (error) {
+    } catch (error) {
       console.error('💥 Error in fetchFromSupabase:', error);
       setSyncStatus('error');
       return { creations: [], hasMore: false };
@@ -451,13 +452,13 @@ const OwnCreations = () => {
           setLoading(false);
           
           // Extract tags
-        const tagsSet = new Set<string>();
+          const tagsSet = new Set<string>();
           dbCreations.forEach(creation => {
-          if (creation.tags && Array.isArray(creation.tags)) {
-            creation.tags.forEach((tag: string) => tagsSet.add(tag));
-          }
-        });
-        setAllTags(Array.from(tagsSet));
+            if (creation.tags && Array.isArray(creation.tags)) {
+              creation.tags.forEach((tag: string) => tagsSet.add(tag));
+            }
+          });
+          setAllTags(Array.from(tagsSet));
         }
         
         // STEP 2: Sync with Supabase for fresh data
@@ -682,68 +683,6 @@ const OwnCreations = () => {
     setSelectedForPreset([]);
   };
 
-  // Create preset with draft status
-  const createPresetFromSelection = async () => {
-    if (selectedForPreset.length === 0) {
-      showNotification('error', 'Please select at least one image for the preset');
-      return;
-    }
-
-    if (selectedForPreset.length > MAX_EGGS) {
-      showNotification('error', `Maximum ${MAX_EGGS} eggs can be selected`);
-      return;
-    }
-
-    if (!presetFormData.titleEn || !presetFormData.titleDe) {
-      showNotification('error', 'Please provide both English and German titles');
-      return;
-    }
-
-    const selectedEggs = creations.filter(creation => selectedForPreset.includes(creation.id));
-    
-    try {
-      const imageUrls = selectedEggs.map(egg => egg.image_url);
-      
-      const presetData = {
-        preset_name: {
-          en_name: presetFormData.titleEn,
-          de_name: presetFormData.titleDe,
-        },
-        preset_desc: {
-          en_desc: presetFormData.descEn,
-          de_desc: presetFormData.descDe,
-        },
-        preset_size_json: { value: selectedEggs.length * 2, price: 0.99 },
-        preset_price: '0.99',
-        preset_images: imageUrls,
-        preset_status: 'draft',
-        created_at: new Date().toISOString()
-      };
-
-      const { data, error } = await supabase
-        .from('presets')
-        .insert(presetData)
-        .select('*');
-
-      if (error) {
-        throw error;
-      }
-
-      showNotification('success', 'Preset created successfully as draft!');
-      setPresetCreationMode(false);
-      setSelectedForPreset([]);
-      
-      // Optionally redirect to presets page
-      setTimeout(() => {
-        window.location.href = '/dashboard/presets';
-      }, 2000);
-
-    } catch (error) {
-      console.error('❌ Error creating preset:', error);
-      showNotification('error', 'Failed to create preset');
-    }
-  };
-
   // Make Live functionality - Create preset with approved status
   const handleMakeLive = async () => {
     if (selectedForPreset.length === 0) {
@@ -777,8 +716,8 @@ const OwnCreations = () => {
           de_name: presetFormData.titleDe,
         },
         preset_desc: {
-          en_desc: presetFormData.descEn,
-          de_desc: presetFormData.descDe,
+          en_desc: presetFormData.descEn || '',
+          de_desc: presetFormData.descDe || '',
         },
         preset_size_json: { value: selectedEggs.length * 2, price: 0.99 },
         preset_price: '0.99',
@@ -790,12 +729,15 @@ const OwnCreations = () => {
         created_by: currentUserId
       };
 
+      console.log('🚀 Publishing preset:', presetData);
+
       const { data, error } = await supabase
         .from('presets')
         .insert(presetData)
         .select('*');
 
       if (error) {
+        console.error('❌ Error publishing preset:', error);
         throw error;
       }
 
@@ -819,18 +761,18 @@ const OwnCreations = () => {
   const filteredCreations = useMemo(() => {
     return creations
       .filter(creation => {
-      const title = creation.title || '';
+        const title = creation.title || '';
         const prompt = creation.prompt || '';
-      const tags = Array.isArray(creation.tags) ? creation.tags : [];
-      
-      const matchesSearch = 
-        title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        const tags = Array.isArray(creation.tags) ? creation.tags : [];
+        
+        const matchesSearch = 
+          title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           prompt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      const matchesTag = 
-        tagFilter === 'all' || 
-        tags.includes(tagFilter);
+          tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+        
+        const matchesTag = 
+          tagFilter === 'all' || 
+          tags.includes(tagFilter);
 
         const matchesSource = 
           sourceFilter === 'all' || 
@@ -1153,14 +1095,6 @@ const OwnCreations = () => {
                   Cancel Preset
                 </button>
                 <button 
-                  className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
-                  onClick={createPresetFromSelection}
-                  disabled={selectedForPreset.length === 0}
-                >
-                  <PlusCircle className="mr-2" size={18} />
-                  Create Draft ({selectedForPreset.length}/{MAX_EGGS})
-                </button>
-                <button 
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg flex items-center disabled:opacity-50"
                   onClick={handleMakeLive}
                   disabled={selectedForPreset.length === 0 || makingLive}
@@ -1175,16 +1109,16 @@ const OwnCreations = () => {
               </>
             ) : (
               <>
-            <button 
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              onClick={refreshCreations}
-              disabled={loading}
-            >
-              <RefreshCw className={loading ? "animate-spin" : ""} size={18} />
-              Refresh
-            </button>
-            <button 
-              className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
+                <button 
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  onClick={refreshCreations}
+                  disabled={loading}
+                >
+                  <RefreshCw className={loading ? "animate-spin" : ""} size={18} />
+                  Refresh
+                </button>
+                <button 
+                  className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
                   onClick={startPresetCreation}
                 >
                   <PlusCircle className="mr-2" size={18} />
@@ -1192,11 +1126,11 @@ const OwnCreations = () => {
                 </button>
                 <button 
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg flex items-center"
-              onClick={handleDownloadAll}
-            >
-              <Download className="mr-2" size={18} />
-              Download All
-            </button>
+                  onClick={handleDownloadAll}
+                >
+                  <Download className="mr-2" size={18} />
+                  Download All
+                </button>
               </>
             )}
           </div>
@@ -1204,14 +1138,14 @@ const OwnCreations = () => {
 
         {/* Preset Creation Form */}
         {presetCreationMode && (
-          <div className="mt-6 p-4 bg-white ">
+          <div className="mt-6 p-4 bg-white border border-gray-200 rounded-lg">
             <h3 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
               <Grid className="mr-2" size={20} />
               Create New Preset from Selected Eggs
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Preset Title (English)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Preset Title (English) *</label>
                 <input
                   type="text"
                   value={presetFormData.titleEn}
@@ -1221,7 +1155,7 @@ const OwnCreations = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Preset Title (German)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Preset Title (German) *</label>
                 <input
                   type="text"
                   value={presetFormData.titleDe}
@@ -1230,7 +1164,26 @@ const OwnCreations = () => {
                   placeholder="Frühlingsblumen Kollektion"
                 />
               </div>
-
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description (English) - Optional</label>
+                <textarea
+                  value={presetFormData.descEn}
+                  onChange={(e) => setPresetFormData(prev => ({ ...prev, descEn: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
+                  placeholder="A beautiful collection of spring flower designs"
+                  rows={2}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description (German) - Optional</label>
+                <textarea
+                  value={presetFormData.descDe}
+                  onChange={(e) => setPresetFormData(prev => ({ ...prev, descDe: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
+                  placeholder="Eine wunderschöne Kollektion von Frühlingsblumen-Designs"
+                  rows={2}
+                />
+              </div>
             </div>
             <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-center justify-between">
@@ -1373,11 +1326,11 @@ const OwnCreations = () => {
                           >
                             <MessageSquare size={12} />
                           </button>
-                    </div>
+                        </div>
                       )}
                     </>
                   )}
-                  </div>
+                </div>
                   
                 <div className="p-2">
                   {creation.prompt ? (
@@ -1392,7 +1345,7 @@ const OwnCreations = () => {
           
           {hasMoreToShow && (
             <div className="flex justify-center mt-6">
-                <button
+              <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
                 className="px-6 py-3 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1408,8 +1361,8 @@ const OwnCreations = () => {
                     <ChevronDown size={18} />
                   </>
                 )}
-                </button>
-              </div>
+              </button>
+            </div>
           )}
           {!hasMoreToShow && filteredCreations.length > 0 && (
             <div className="text-center mt-6 text-gray-500 text-sm">
