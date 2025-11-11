@@ -67,7 +67,6 @@ interface FormData {
   titleEn: string;
   titleDe: string;
   descEn: string;
-  descDe: string;
   size: PresetSize;
   price: string;
   images: PresetImage[];
@@ -84,8 +83,6 @@ interface ApprovalModalData {
   presetId: string;
   presetName: string;
   germanTitle: string;
-  germanDescription: string;
-  adminNotes: string;
 }
 
 interface RejectionModalData {
@@ -377,7 +374,6 @@ const Page = () => {
     titleEn: '', 
     titleDe: '', 
     descEn: '', 
-    descDe: '', 
     size: { value: '', price: 0 }, 
     price: '', 
     images: [] 
@@ -933,7 +929,7 @@ const Page = () => {
             },
             preset_desc: {
               en_desc: formData.descEn,
-              de_desc: formData.descDe,
+              de_desc: '', // German description empty
             },
             preset_size_json: formData.size,
             preset_price: formData.price,
@@ -963,7 +959,7 @@ const Page = () => {
           },
           preset_desc: {
             en_desc: formData.descEn,
-            de_desc: formData.descDe,
+            de_desc: '', // German description empty
           },
           preset_size_json: formData.size,
           preset_price: formData.price,
@@ -1096,7 +1092,6 @@ const Page = () => {
         titleEn: presetToEdit.preset_name?.en_name || '',
         titleDe: presetToEdit.preset_name?.de_name || '',
         descEn: presetToEdit.preset_desc?.en_desc || '',
-        descDe: presetToEdit.preset_desc?.de_desc || '',
         size: presetToEdit.preset_size_json || { value: '', price: 0 },
         price: presetToEdit.preset_price || '',
         images: existingImages
@@ -1155,7 +1150,6 @@ const Page = () => {
               titleEn: '', 
               titleDe: '', 
               descEn: '', 
-              descDe: '', 
               size: { value: '', price: 0 }, 
               price: '', 
               images: [] 
@@ -1223,37 +1217,23 @@ const Page = () => {
             </div>
           </div>
       
-          {/* Descriptions Section - Optional */}
+          {/* Description Section - Only English */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
               <Edit className="text-[#e6d281] mr-2" size={20} />
-              Descriptions (Optional)
+              Description (Optional)
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="desc-en" className="block text-sm font-medium text-gray-700 mb-1">Description (English)</label>
-                <textarea 
-                  onChange={handleInputChange} 
-                  id="desc-en" 
-                  name="descEn" 
-                  rows={3} 
-                  value={formData.descEn}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
-                  placeholder="A beautiful collection of spring flower designs for your egg memory game."
-                ></textarea>
-              </div>
-              <div>
-                <label htmlFor="desc-de" className="block text-sm font-medium text-gray-700 mb-1">Description (German)</label>
-                <textarea 
-                  onChange={handleInputChange} 
-                  id="desc-de" 
-                  name="descDe" 
-                  rows={3} 
-                  value={formData.descDe}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
-                  placeholder="Eine wunderschöne Kollektion von Frühlingsblumen-Designs für Ihr Eier-Memory-Spiel."
-                ></textarea>
-              </div>
+            <div>
+              <label htmlFor="desc-en" className="block text-sm font-medium text-gray-700 mb-1">Description (English)</label>
+              <textarea 
+                onChange={handleInputChange} 
+                id="desc-en" 
+                name="descEn" 
+                rows={3} 
+                value={formData.descEn}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
+                placeholder="A beautiful collection of spring flower designs for your egg memory game."
+              ></textarea>
             </div>
           </div>
     
@@ -1446,7 +1426,6 @@ const Page = () => {
                   titleEn: '', 
                   titleDe: '', 
                   descEn: '', 
-                  descDe: '', 
                   size: { value: '', price: 0 }, 
                   price: '', 
                   images: [] 
@@ -1628,7 +1607,7 @@ const Page = () => {
                       </div>
                     )}
     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
+                    <div className="my-4">
                       <div>
                         <p className="text-xs text-gray-500 mb-1 flex items-center">
                           <Edit className="mr-1" size={14} />
@@ -1636,15 +1615,6 @@ const Page = () => {
                         </p>
                         <p className="text-gray-700 text-sm">
                           {item.preset_desc?.en_desc || 'No description'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1 flex items-center">
-                          <Edit className="mr-1" size={14} />
-                          German Description
-                        </p>
-                        <p className="text-gray-700 text-sm">
-                          {item.preset_desc?.de_desc || 'Keine Beschreibung'}
                         </p>
                       </div>
                     </div>
