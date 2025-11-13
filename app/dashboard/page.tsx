@@ -618,8 +618,8 @@ const processUserGrowthData = (usersData: any[]) => {
                     description={preset.description}
                     image={preset.image}
                     price={preset.price}
-                    salesCount={preset.salesCount}
-                    revenue={preset.revenue}
+                   
+                   
                   />
                 ))}
               </div>
@@ -802,15 +802,7 @@ const BestSellerRow = ({
         <h4 className="font-medium text-gray-900 truncate text-base">{title}</h4>
         <span className="text-base font-semibold text-green-600 ml-2">${price}</span>
       </div>
-      <p className="text-sm text-gray-500 truncate mt-1">{description}</p>
-      <div className="flex justify-between items-center mt-2">
-        <span className="text-sm text-gray-600">
-          {salesCount} sales
-        </span>
-        <span className="text-sm font-semibold text-green-600">
-          ${revenue} revenue
-        </span>
-      </div>
+    
     </div>
   </div>
 );
