@@ -5,22 +5,19 @@ import {
   Image as ImageIcon,
   Search,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Download,
   Calendar,
   RefreshCw,
   XCircle,
   AlertCircle,
   CheckCircle,
-  Tag,
   Loader2,
   MessageSquare,
-  Layers,
   Trash2,
   PlusCircle,
   Grid,
-  Globe
+  Globe,
+  Moon
 } from "lucide-react";
 import { supabase } from '../../../utils/supabaseClient';
 
@@ -51,7 +48,20 @@ interface PresetCreationData {
   selectedEggs: Creation[];
 }
 
-// IndexedDB utility functions
+interface DarkModeEgg {
+  id: string;
+  creation_id: string;
+  image_url: string;
+  title?: string;
+  prompt?: string;
+  tags?: string[];
+  is_active: boolean;
+  created_at: string;
+  created_by: string;
+  priority: number;
+}
+
+// IndexedDB utility functions (same as before)
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('CreationsDB', 1);
@@ -77,15 +87,12 @@ const storeCreationsInDB = async (creations: Creation[]): Promise<void> => {
     const transaction = db.transaction(['creations'], 'readwrite');
     const store = transaction.objectStore('creations');
     
-    // Clear existing data
     await store.clear();
     
-    // Store new creations
     for (const creation of creations) {
       store.add(creation);
     }
     
-    // Wait for transaction to complete using Promise
     await new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => {
         console.log('✅ Successfully stored creations in IndexedDB:', creations.length);
@@ -157,7 +164,100 @@ const OwnCreations = () => {
   });
   const [makingLive, setMakingLive] = useState(false);
 
+  // Dark Mode State
+  const [darkModeEggs, setDarkModeEggs] = useState<DarkModeEgg[]>([]);
+  const [togglingDarkMode, setTogglingDarkMode] = useState<string | null>(null);
+
   const itemsPerBatch = 100;
+
+  // Fetch dark mode eggs - USING dark_mode_eggs TABLE
+  const fetchDarkModeEggs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('dark_mode_eggs')  // ✅ Changed to dark_mode_eggs
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching dark mode eggs:', error);
+        return;
+      }
+
+      setDarkModeEggs(data || []);
+    } catch (error) {
+      console.error('Error in fetchDarkModeEggs:', error);
+    }
+  };
+
+  // Check if creation is in dark mode
+  const isCreationInDarkMode = (creationId: string) => {
+    return darkModeEggs.some(egg => egg.creation_id === creationId && egg.is_active);
+  };
+
+  // Toggle dark mode for creation - USING dark_mode_eggs TABLE
+  const toggleDarkModeForCreation = async (creationId: string, creationData: Creation) => {
+    setTogglingDarkMode(creationId);
+    
+    try {
+      const existingEgg = darkModeEggs.find(egg => egg.creation_id === creationId);
+      
+      if (existingEgg) {
+        // Toggle existing egg
+        const { error } = await supabase
+          .from('dark_mode_eggs')  // ✅ Changed to dark_mode_eggs
+          .update({ is_active: !existingEgg.is_active })
+          .eq('id', existingEgg.id);
+
+        if (error) {
+          console.error('Error toggling dark mode:', error);
+          showNotification('error', 'Failed to update dark mode');
+          return;
+        }
+
+        // Update local state
+        setDarkModeEggs(prev => 
+          prev.map(egg => 
+            egg.id === existingEgg.id 
+              ? { ...egg, is_active: !existingEgg.is_active }
+              : egg
+          )
+        );
+
+        showNotification('success', `Creation ${!existingEgg.is_active ? 'added to' : 'removed from'} dark mode`);
+      } else {
+        // Add new egg to dark mode - USING SAME IMAGE
+        const darkModeEggData = {
+          creation_id: creationId,
+          image_url: creationData.image_url, // SAME image as light mode
+          title: creationData.title || '',
+          prompt: creationData.prompt || '',
+          tags: creationData.tags || [],
+          is_active: true,
+          created_by: creationData.creator_id,
+          priority: 0
+        };
+
+        const { error } = await supabase
+          .from('dark_mode_eggs')  // ✅ Changed to dark_mode_eggs
+          .insert(darkModeEggData);
+
+        if (error) {
+          console.error('Error adding to dark mode:', error);
+          showNotification('error', 'Failed to add to dark mode');
+          return;
+        }
+
+        // Refresh dark mode eggs
+        fetchDarkModeEggs();
+        showNotification('success', 'Creation added to dark mode');
+      }
+    } catch (error) {
+      console.error('Error in toggleDarkModeForCreation:', error);
+      showNotification('error', 'An unexpected error occurred');
+    } finally {
+      setTogglingDarkMode(null);
+    }
+  };
 
   // Real-time subscription for users table changes
   const setupRealtimeSubscription = () => {
@@ -168,7 +268,7 @@ const OwnCreations = () => {
       .on(
         'postgres_changes',
         {
-          event: '*', // INSERT, UPDATE, DELETE
+          event: '*',
           schema: 'public',
           table: 'users'
         },
@@ -179,7 +279,6 @@ const OwnCreations = () => {
             const newUser = payload.new;
             if (newUser.generated_images) {
               console.log('🆕 New/Updated user with generated_images detected');
-              // Refresh data to include new images
               syncWithSupabase();
             }
           }
@@ -236,7 +335,6 @@ const OwnCreations = () => {
           try {
             let generatedImagesData: any[] = [];
             
-            // Parse generated_images field
             if (typeof user.generated_images === 'string') {
               try {
                 const parsed = JSON.parse(user.generated_images);
@@ -265,7 +363,6 @@ const OwnCreations = () => {
               }
             }
 
-            // Process each generated image
             generatedImagesData.forEach((imgData: any, index: number) => {
               const imageUrl = imgData.url || imgData.image_url;
               const prompt = imgData.prompt || imgData.description || '';
@@ -324,11 +421,9 @@ const OwnCreations = () => {
       if (result.creations.length > 0) {
         console.log('🔄 Updating with fresh Supabase data...');
         
-        // Update state with new data
         setCreations(prevCreations => {
           const newCreations = [...result.creations];
           
-          // Update tags
           const tagsSet = new Set<string>(allTags);
           newCreations.forEach(creation => {
             if (creation.tags && Array.isArray(creation.tags)) {
@@ -337,7 +432,6 @@ const OwnCreations = () => {
           });
           setAllTags(Array.from(tagsSet));
           
-          // Store in IndexedDB
           storeCreationsInDB(newCreations);
           
           return newCreations;
@@ -356,18 +450,45 @@ const OwnCreations = () => {
     }
   };
 
+  // refreshCreations function
+  const refreshCreations = async () => {
+    console.log('🔄 Manual refresh triggered');
+    setLoading(true);
+    setDisplayedCount(100);
+    setHasMore(true);
+    
+    try {
+      console.log('🧹 Clearing cache for fresh data...');
+      try {
+        const db = await openDB();
+        const transaction = db.transaction(['creations'], 'readwrite');
+        const store = transaction.objectStore('creations');
+        await store.clear();
+        console.log('✅ Cache cleared');
+      } catch (error) {
+        console.error('❌ Error clearing cache:', error);
+      }
+
+      await syncWithSupabase();
+      setLoading(false);
+      showNotification('success', 'Creations refreshed successfully');
+    } catch (err) {
+      console.error('❌ Refresh failed:', err);
+      setLoading(false);
+      showNotification('error', 'Failed to refresh creations');
+    }
+  };
+
   const fetchGeneratedImagesFromUsers = async (offset = 0, batchSize = 50): Promise<{ creations: Creation[], hasMore: boolean }> => {
     try {
       console.log(`🔄 fetchGeneratedImagesFromUsers - Offset: ${offset}, BatchSize: ${batchSize}`);
       
-      // STRATEGY: IndexedDB first, then Supabase
       console.log('🏠 STEP 1: Loading from IndexedDB (instant)...');
       const dbCreations = await getCreationsFromDB();
       
       if (dbCreations.length > 0 && offset === 0) {
         console.log('✅ USING INDEXEDDB CACHE:', dbCreations.length, 'creations');
         
-        // Start Supabase sync in background for fresh data
         setTimeout(() => {
           console.log('🔄 BACKGROUND: Starting Supabase sync...');
           syncWithSupabase();
@@ -436,84 +557,7 @@ const OwnCreations = () => {
     }
   };
 
-  useEffect(() => {
-    const initializeData = async () => {
-      try {
-        console.log('🚀 Initializing data...');
-        setLoading(true);
-        
-        // STEP 1: Load from IndexedDB instantly
-        console.log('🏠 Loading from IndexedDB...');
-        const dbCreations = await getCreationsFromDB();
-        
-        if (dbCreations.length > 0) {
-          console.log('✅ IndexedDB loaded instantly:', dbCreations.length, 'creations');
-          setCreations(dbCreations);
-          setLoading(false);
-          
-          // Extract tags
-          const tagsSet = new Set<string>();
-          dbCreations.forEach(creation => {
-            if (creation.tags && Array.isArray(creation.tags)) {
-              creation.tags.forEach((tag: string) => tagsSet.add(tag));
-            }
-          });
-          setAllTags(Array.from(tagsSet));
-        }
-        
-        // STEP 2: Sync with Supabase for fresh data
-        console.log('🔄 Syncing with Supabase for fresh data...');
-        await syncWithSupabase();
-        
-        // STEP 3: Setup real-time subscriptions
-        console.log('🔔 Setting up real-time subscriptions...');
-        const subscription = setupRealtimeSubscription();
-        
-        setLastSync(new Date());
-        
-        return () => {
-          console.log('🧹 Cleaning up real-time subscription');
-          subscription.unsubscribe();
-        };
-      } catch (err) {
-        console.error('💥 Initialization failed:', err);
-        setLoading(false);
-        showNotification('error', 'Failed to load creations');
-      }
-    };
-
-    initializeData();
-  }, []);
-
-  const refreshCreations = async () => {
-    console.log('🔄 Manual refresh triggered');
-    setLoading(true);
-    setDisplayedCount(100);
-    setHasMore(true);
-    
-    try {
-      console.log('🧹 Clearing cache for fresh data...');
-      // Clear IndexedDB to force fresh Supabase fetch
-      try {
-        const db = await openDB();
-        const transaction = db.transaction(['creations'], 'readwrite');
-        const store = transaction.objectStore('creations');
-        await store.clear();
-        console.log('✅ Cache cleared');
-      } catch (error) {
-        console.error('❌ Error clearing cache:', error);
-      }
-
-      await syncWithSupabase();
-      setLoading(false);
-      showNotification('success', 'Creations refreshed successfully');
-    } catch (err) {
-      console.error('❌ Refresh failed:', err);
-      setLoading(false);
-      showNotification('error', 'Failed to refresh creations');
-    }
-  };
-
+  // handleDeleteAsset function
   const handleDeleteAsset = async () => {
     if (!selectedImage) {
       console.error('❌ No image selected for deletion');
@@ -523,7 +567,6 @@ const OwnCreations = () => {
     
     setDeleting(true);
     try {
-      // Use creator_id directly instead of parsing ID (more reliable, especially with UUIDs)
       const userId = selectedImage.creator_id || selectedImage.id.split('-')[0];
       const targetImageUrl = selectedImage.image_url;
       
@@ -537,7 +580,6 @@ const OwnCreations = () => {
       
       console.log('🗑️ Deleting asset for user:', userId, 'Image URL:', targetImageUrl);
       
-      // Fetch current user data
       const { data: userData, error: fetchError } = await supabase
         .from('users')
         .select('generated_images')
@@ -555,7 +597,6 @@ const OwnCreations = () => {
 
       let generatedImagesData: any[] = [];
       
-      // Parse generated_images using the same logic as fetchFromSupabase
       if (typeof userData.generated_images === 'string') {
         try {
           const parsed = JSON.parse(userData.generated_images);
@@ -586,18 +627,15 @@ const OwnCreations = () => {
         }
       }
 
-      // Remove the specific image by matching URL (more reliable than index)
       const updatedImages = generatedImagesData.filter((imgData: any) => {
         const imageUrl = imgData.url || imgData.image_url;
         return imageUrl !== targetImageUrl;
       });
 
-      // Check if image was actually found and removed
       if (updatedImages.length === generatedImagesData.length) {
         console.warn('⚠️ Image not found in user data, but proceeding with local removal');
       }
 
-      // Update user record with filtered images
       const { error: updateError } = await supabase
         .from('users')
         .update({ generated_images: updatedImages })
@@ -608,10 +646,8 @@ const OwnCreations = () => {
         throw updateError;
       }
 
-      // Update local state and IndexedDB
       setCreations(prev => {
         const updated = prev.filter(creation => creation.id !== selectedImage.id);
-        // Update IndexedDB
         storeCreationsInDB(updated).catch(err => {
           console.error('❌ Error updating IndexedDB:', err);
         });
@@ -630,16 +666,62 @@ const OwnCreations = () => {
     }
   };
 
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        console.log('🚀 Initializing data...');
+        setLoading(true);
+        
+        // Load dark mode eggs first
+        await fetchDarkModeEggs();
+        
+        console.log('🏠 Loading from IndexedDB...');
+        const dbCreations = await getCreationsFromDB();
+        
+        if (dbCreations.length > 0) {
+          console.log('✅ IndexedDB loaded instantly:', dbCreations.length, 'creations');
+          setCreations(dbCreations);
+          setLoading(false);
+          
+          const tagsSet = new Set<string>();
+          dbCreations.forEach(creation => {
+            if (creation.tags && Array.isArray(creation.tags)) {
+              creation.tags.forEach((tag: string) => tagsSet.add(tag));
+            }
+          });
+          setAllTags(Array.from(tagsSet));
+        }
+        
+        console.log('🔄 Syncing with Supabase for fresh data...');
+        await syncWithSupabase();
+        
+        console.log('🔔 Setting up real-time subscriptions...');
+        const subscription = setupRealtimeSubscription();
+        
+        setLastSync(new Date());
+        
+        return () => {
+          console.log('🧹 Cleaning up real-time subscription');
+          subscription.unsubscribe();
+        };
+      } catch (err) {
+        console.error('💥 Initialization failed:', err);
+        setLoading(false);
+        showNotification('error', 'Failed to load creations');
+      }
+    };
+
+    initializeData();
+  }, []);
+
   // Preset creation functions
   const MAX_EGGS = 12;
   
   const togglePresetSelection = (creationId: string) => {
     setSelectedForPreset(prev => {
       if (prev.includes(creationId)) {
-        // Deselect
         return prev.filter(id => id !== creationId);
       } else {
-        // Select only if under limit
         if (prev.length >= MAX_EGGS) {
           showNotification('error', `Maximum ${MAX_EGGS} eggs can be selected`);
           return prev;
@@ -660,7 +742,7 @@ const OwnCreations = () => {
     
     setSelectedForPreset(prev => {
       const newSelection = [...prev, ...eggsToSelect.map(egg => egg.id)];
-      return newSelection.slice(0, MAX_EGGS); // Ensure we don't exceed limit
+      return newSelection.slice(0, MAX_EGGS);
     });
     
     showNotification('success', `Auto-selected ${eggsToSelect.length} egg(s)`);
@@ -683,7 +765,7 @@ const OwnCreations = () => {
     setSelectedForPreset([]);
   };
 
-  // Make Live functionality - Create preset with approved status
+  // Make Live functionality
   const handleMakeLive = async () => {
     if (selectedForPreset.length === 0) {
       showNotification('error', 'Please select at least one image for the preset');
@@ -706,7 +788,6 @@ const OwnCreations = () => {
     try {
       const imageUrls = selectedEggs.map(egg => egg.image_url);
       
-      // Get current user for created_by field
       const { data: { user } } = await supabase.auth.getUser();
       const currentUserId = user?.id;
 
@@ -745,7 +826,6 @@ const OwnCreations = () => {
       setPresetCreationMode(false);
       setSelectedForPreset([]);
       
-      // Redirect to presets page
       setTimeout(() => {
         window.location.href = '/dashboard/presets';
       }, 2000);
@@ -976,7 +1056,6 @@ const OwnCreations = () => {
               <button
                 onClick={() => {
                   setShowDeleteConfirm(false);
-                  // Don't clear selectedImage here - let the user decide if they want to view the image
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium rounded-lg border border-gray-300 hover:border-gray-400 transition-colors"
                 disabled={deleting}
@@ -1243,104 +1322,141 @@ const OwnCreations = () => {
       ) : (
         <>
           <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-10 lg:grid-cols-15 xl:grid-cols-20 gap-2 mb-6" style={{ gridTemplateColumns: 'repeat(20, minmax(0, 1fr))' }}>
-            {currentItems.map((creation) => (
-              <div 
-                key={creation.id} 
-                className={`bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer col-span-1 ${
-                  presetCreationMode && selectedForPreset.includes(creation.id) 
-                    ? 'ring-2 ring-[#e6d281] ring-offset-2' 
-                    : ''
-                }`}
-                onClick={() => {
-                  if (presetCreationMode) {
-                    togglePresetSelection(creation.id);
-                  } else {
-                    setSelectedImage(creation);
-                  }
-                }}
-              >
-                <div className="relative aspect-square">
-                  {imageLoadingStates[creation.id] !== false && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                      <Loader2 className="animate-spin text-gray-400" size={24} />
-                    </div>
-                  )}
-                  <Image 
-                    src={creation.image_url} 
-                    alt={creation.title}
-                    fill
-                    className={`object-cover ${imageLoadingStates[creation.id] !== false ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
-                    onLoadingComplete={() => handleImageLoad(creation.id)}
-                    onError={() => {
-                      handleImageLoad(creation.id);
-                    }}
-                    unoptimized
-                  />
-                  
-                  {/* Selection Indicator */}
-                  {presetCreationMode && selectedForPreset.includes(creation.id) && (
-                    <div className="absolute top-1 right-1 bg-[#e6d281] text-gray-800 rounded-full w-5 h-5 flex items-center justify-center">
-                      <CheckCircle size={12} />
-                    </div>
-                  )}
-                  
-                  {/* Action Buttons - Only show when not in preset creation mode */}
-                  {!presetCreationMode && (
-                    <>
-                      <div className="absolute top-1 right-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 flex gap-1 transition-opacity">
-                        <button 
-                          className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500 active:scale-95 transition-transform"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            handleDownload(creation.id);
-                          }}
-                          title="Download"
-                        >
-                          <Download size={12} />
-                        </button>
-                        <button 
-                          className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-red-500 active:scale-95 transition-transform"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            console.log('🗑️ Delete button clicked for:', creation.id);
-                            setSelectedImage(creation);
-                            setShowDeleteConfirm(true);
-                          }}
-                          title="Delete"
-                        >
-                          <Trash2 size={12} />
-                        </button>
+            {currentItems.map((creation) => {
+              const isInDarkMode = isCreationInDarkMode(creation.id);
+              
+              return (
+                <div 
+                  key={creation.id} 
+                  className={`bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer col-span-1 ${
+                    presetCreationMode && selectedForPreset.includes(creation.id) 
+                      ? 'ring-2 ring-[#e6d281] ring-offset-2' 
+                      : ''
+                  }`}
+                  onClick={() => {
+                    if (presetCreationMode) {
+                      togglePresetSelection(creation.id);
+                    } else {
+                      setSelectedImage(creation);
+                    }
+                  }}
+                >
+                  <div className="relative aspect-square">
+                    {imageLoadingStates[creation.id] !== false && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                        <Loader2 className="animate-spin text-gray-400" size={24} />
                       </div>
-                
-                      {hasValidPrompt(creation) && (
-                        <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    )}
+                    <Image 
+                      src={creation.image_url} 
+                      alt={creation.title}
+                      fill
+                      className={`object-cover ${imageLoadingStates[creation.id] !== false ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
+                      onLoadingComplete={() => handleImageLoad(creation.id)}
+                      onError={() => {
+                        handleImageLoad(creation.id);
+                      }}
+                      unoptimized
+                    />
+                    
+                    {/* Selection Indicator */}
+                    {presetCreationMode && selectedForPreset.includes(creation.id) && (
+                      <div className="absolute top-1 right-1 bg-[#e6d281] text-gray-800 rounded-full w-5 h-5 flex items-center justify-center">
+                        <CheckCircle size={12} />
+                      </div>
+                    )}
+                    
+                    {/* Action Buttons - Only show when not in preset creation mode */}
+                    {!presetCreationMode && (
+                      <>
+                        <div className="absolute top-1 right-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 flex gap-1 transition-opacity">
                           <button 
-                            className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
+                            className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500 active:scale-95 transition-transform"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedImage(creation);
+                              e.preventDefault();
+                              handleDownload(creation.id);
                             }}
-                            title="View Prompt"
+                            title="Download"
                           >
-                            <MessageSquare size={12} />
+                            <Download size={12} />
+                          </button>
+                          
+                          {/* Dark Mode Toggle Button */}
+                          <button 
+                            className={`p-1 rounded-full shadow-md active:scale-95 transition-transform ${
+                              isInDarkMode 
+                                ? 'bg-purple-500 text-white hover:bg-purple-600' 
+                                : 'bg-white text-gray-600 hover:text-purple-500'
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              toggleDarkModeForCreation(creation.id, creation);
+                            }}
+                            title={isInDarkMode ? 'Remove from dark mode' : 'Add to dark mode'}
+                            disabled={togglingDarkMode === creation.id}
+                          >
+                            {togglingDarkMode === creation.id ? (
+                              <Loader2 className="animate-spin" size={12} />
+                            ) : (
+                              <Moon size={12} />
+                            )}
+                          </button>
+                          
+                          <button 
+                            className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-red-500 active:scale-95 transition-transform"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              console.log('🗑️ Delete button clicked for:', creation.id);
+                              setSelectedImage(creation);
+                              setShowDeleteConfirm(true);
+                            }}
+                            title="Delete"
+                          >
+                            <Trash2 size={12} />
                           </button>
                         </div>
-                      )}
-                    </>
-                  )}
-                </div>
                   
-                <div className="p-2">
-                  {creation.prompt ? (
-                    <div className="text-xs text-gray-600 truncate" title={creation.prompt}>
-                      {truncatePrompt(creation.prompt, 60)}
-                    </div>
-                  ) : null}
+                        {hasValidPrompt(creation) && (
+                          <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              className="p-1 bg-white rounded-full shadow-md text-gray-600 hover:text-blue-500"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedImage(creation);
+                              }}
+                              title="View Prompt"
+                            >
+                              <MessageSquare size={12} />
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                    
+                  <div className="p-2">
+                    {creation.prompt ? (
+                      <div className="text-xs text-gray-600 truncate" title={creation.prompt}>
+                        {truncatePrompt(creation.prompt, 60)}
+                      </div>
+                    ) : null}
+                    
+                    {/* Dark Mode Badge */}
+                    {isInDarkMode && (
+                      <div className="flex items-center mt-1">
+                        <span className="inline-flex items-center px-1.5 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
+                          <Moon size={8} className="mr-0.5" />
+                          Dark Mode
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           
           {hasMoreToShow && (
