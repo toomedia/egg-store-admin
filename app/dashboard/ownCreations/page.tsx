@@ -17,7 +17,8 @@ import {
   PlusCircle,
   Grid,
   Globe,
-  Moon
+  Moon,
+  Sun
 } from "lucide-react";
 import { supabase } from '../../../utils/supabaseClient';
 
@@ -167,6 +168,8 @@ const OwnCreations = () => {
   // Dark Mode State
   const [darkModeEggs, setDarkModeEggs] = useState<DarkModeEgg[]>([]);
   const [togglingDarkMode, setTogglingDarkMode] = useState<string | null>(null);
+  const [showDarkModeModal, setShowDarkModeModal] = useState(false);
+  const [selectedForDarkMode, setSelectedForDarkMode] = useState<string[]>([]);
 
   const itemsPerBatch = 100;
 
@@ -257,6 +260,156 @@ const OwnCreations = () => {
     } finally {
       setTogglingDarkMode(null);
     }
+  };
+
+  // Bulk add to dark mode
+  const bulkAddToDarkMode = async () => {
+    if (selectedForDarkMode.length === 0) {
+      showNotification('error', 'Please select at least one creation for dark mode');
+      return;
+    }
+
+    setTogglingDarkMode('bulk');
+    
+    try {
+      const successfulAdds: string[] = [];
+      
+      for (const creationId of selectedForDarkMode) {
+        const creation = creations.find(c => c.id === creationId);
+        if (!creation) continue;
+        
+        const existingEgg = darkModeEggs.find(egg => egg.creation_id === creationId);
+        
+        if (!existingEgg) {
+          const darkModeEggData = {
+            creation_id: creationId,
+            image_url: creation.image_url,
+            title: creation.title || '',
+            prompt: creation.prompt || '',
+            tags: creation.tags || [],
+            is_active: true,
+            created_by: creation.creator_id,
+            priority: 0
+          };
+
+          const { error } = await supabase
+            .from('dark_mode_eggs')
+            .insert(darkModeEggData);
+
+          if (error) {
+            console.error(`Error adding creation ${creationId} to dark mode:`, error);
+            continue;
+          }
+          
+          successfulAdds.push(creationId);
+        } else if (!existingEgg.is_active) {
+          const { error } = await supabase
+            .from('dark_mode_eggs')
+            .update({ is_active: true })
+            .eq('id', existingEgg.id);
+
+          if (error) {
+            console.error(`Error activating creation ${creationId} in dark mode:`, error);
+            continue;
+          }
+          
+          successfulAdds.push(creationId);
+        }
+      }
+
+      // Refresh dark mode eggs
+      await fetchDarkModeEggs();
+      
+      if (successfulAdds.length > 0) {
+        showNotification('success', `Successfully added ${successfulAdds.length} creation(s) to dark mode`);
+        setSelectedForDarkMode([]);
+        setShowDarkModeModal(false);
+      } else {
+        showNotification('info', 'No new creations were added to dark mode');
+      }
+    } catch (error) {
+      console.error('Error in bulkAddToDarkMode:', error);
+      showNotification('error', 'Failed to add creations to dark mode');
+    } finally {
+      setTogglingDarkMode(null);
+    }
+  };
+
+  // Bulk remove from dark mode
+  const bulkRemoveFromDarkMode = async () => {
+    if (selectedForDarkMode.length === 0) {
+      showNotification('error', 'Please select at least one creation to remove from dark mode');
+      return;
+    }
+
+    setTogglingDarkMode('bulk-remove');
+    
+    try {
+      const successfulRemovals: string[] = [];
+      
+      for (const creationId of selectedForDarkMode) {
+        const existingEgg = darkModeEggs.find(egg => egg.creation_id === creationId && egg.is_active);
+        
+        if (existingEgg) {
+          const { error } = await supabase
+            .from('dark_mode_eggs')
+            .update({ is_active: false })
+            .eq('id', existingEgg.id);
+
+          if (error) {
+            console.error(`Error removing creation ${creationId} from dark mode:`, error);
+            continue;
+          }
+          
+          successfulRemovals.push(creationId);
+        }
+      }
+
+      // Refresh dark mode eggs
+      await fetchDarkModeEggs();
+      
+      if (successfulRemovals.length > 0) {
+        showNotification('success', `Successfully removed ${successfulRemovals.length} creation(s) from dark mode`);
+        setSelectedForDarkMode([]);
+        setShowDarkModeModal(false);
+      } else {
+        showNotification('info', 'No creations were removed from dark mode');
+      }
+    } catch (error) {
+      console.error('Error in bulkRemoveFromDarkMode:', error);
+      showNotification('error', 'Failed to remove creations from dark mode');
+    } finally {
+      setTogglingDarkMode(null);
+    }
+  };
+
+  // Toggle selection for dark mode
+  const toggleDarkModeSelection = (creationId: string) => {
+    setSelectedForDarkMode(prev => {
+      if (prev.includes(creationId)) {
+        return prev.filter(id => id !== creationId);
+      } else {
+        return [...prev, creationId];
+      }
+    });
+  };
+
+  // Auto select all visible for dark mode
+  const autoSelectForDarkMode = () => {
+    const visibleCreations = currentItems.map(creation => creation.id);
+    setSelectedForDarkMode(visibleCreations);
+    showNotification('success', `Selected ${visibleCreations.length} creations for dark mode`);
+  };
+
+  // Clear dark mode selection
+  const clearDarkModeSelection = () => {
+    setSelectedForDarkMode([]);
+  };
+
+  // Open dark mode modal
+  const openDarkModeModal = () => {
+    setShowDarkModeModal(true);
+    setSelectedForDarkMode([]);
   };
 
   // Real-time subscription for users table changes
@@ -1078,6 +1231,123 @@ const OwnCreations = () => {
           </div>
         </div>
       )}
+
+      {/* Dark Mode Selection Modal */}
+      {showDarkModeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-gray-800 flex items-center">
+                  <Moon className="mr-2 text-purple-500" size={24} />
+                  Manage Dark Mode Eggs
+                </h3>
+                <button
+                  onClick={() => setShowDarkModeModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+              <p className="text-gray-600 mt-2">
+                Select creations to add or remove from dark mode. Currently selected: {selectedForDarkMode.length} creation(s)
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6">
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+                {currentItems.map((creation) => {
+                  const isSelected = selectedForDarkMode.includes(creation.id);
+                  const isInDarkMode = isCreationInDarkMode(creation.id);
+                  
+                  return (
+                    <div 
+                      key={creation.id}
+                      className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
+                        isSelected 
+                          ? 'border-purple-500 ring-2 ring-purple-200' 
+                          : isInDarkMode
+                            ? 'border-green-500'
+                            : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => toggleDarkModeSelection(creation.id)}
+                    >
+                      <Image
+                        src={creation.image_url}
+                        alt={creation.title}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                      
+                      {/* Selection Indicator */}
+                      {isSelected && (
+                        <div className="absolute top-1 right-1 bg-purple-500 text-white rounded-full w-5 h-5 flex items-center justify-center">
+                          <CheckCircle size={12} />
+                        </div>
+                      )}
+                      
+                      {/* Dark Mode Status Indicator */}
+                      {isInDarkMode && !isSelected && (
+                        <div className="absolute top-1 left-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center">
+                          <Moon size={10} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 bg-gray-50">
+              <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
+                <div className="flex gap-2">
+                  <button
+                    onClick={autoSelectForDarkMode}
+                    className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
+                  >
+                    Select All Visible
+                  </button>
+                  <button
+                    onClick={clearDarkModeSelection}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={bulkRemoveFromDarkMode}
+                    disabled={selectedForDarkMode.length === 0 || togglingDarkMode === 'bulk-remove'}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2"
+                  >
+                    {togglingDarkMode === 'bulk-remove' ? (
+                      <Loader2 className="animate-spin" size={16} />
+                    ) : (
+                      <Sun size={16} />
+                    )}
+                    Remove from Dark Mode ({selectedForDarkMode.length})
+                  </button>
+                  
+                  <button
+                    onClick={bulkAddToDarkMode}
+                    disabled={selectedForDarkMode.length === 0 || togglingDarkMode === 'bulk'}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2"
+                  >
+                    {togglingDarkMode === 'bulk' ? (
+                      <Loader2 className="animate-spin" size={16} />
+                    ) : (
+                      <Moon size={16} />
+                    )}
+                    Add to Dark Mode ({selectedForDarkMode.length})
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {selectedImage && !showDeleteConfirm && (
         <div 
@@ -1196,6 +1466,16 @@ const OwnCreations = () => {
                   <RefreshCw className={loading ? "animate-spin" : ""} size={18} />
                   Refresh
                 </button>
+                
+                {/* Dark Mode Button */}
+                <button 
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors"
+                  onClick={openDarkModeModal}
+                >
+                  <Moon size={18} />
+                  Dark Mode
+                </button>
+                
                 <button 
                   className="px-4 py-2 bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium rounded-lg flex items-center"
                   onClick={startPresetCreation}
@@ -1380,28 +1660,6 @@ const OwnCreations = () => {
                             title="Download"
                           >
                             <Download size={12} />
-                          </button>
-                          
-                          {/* Dark Mode Toggle Button */}
-                          <button 
-                            className={`p-1 rounded-full shadow-md active:scale-95 transition-transform ${
-                              isInDarkMode 
-                                ? 'bg-purple-500 text-white hover:bg-purple-600' 
-                                : 'bg-white text-gray-600 hover:text-purple-500'
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              toggleDarkModeForCreation(creation.id, creation);
-                            }}
-                            title={isInDarkMode ? 'Remove from dark mode' : 'Add to dark mode'}
-                            disabled={togglingDarkMode === creation.id}
-                          >
-                            {togglingDarkMode === creation.id ? (
-                              <Loader2 className="animate-spin" size={12} />
-                            ) : (
-                              <Moon size={12} />
-                            )}
                           </button>
                           
                           <button 

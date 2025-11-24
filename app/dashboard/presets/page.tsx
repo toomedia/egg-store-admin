@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from "../../../utils/supabaseClient"
+import {supabase} from "../../../utils/supabaseClient"
 import {  
   ArrowLeft, 
   PlusCircle, 
@@ -18,9 +18,15 @@ import {
   Check,
   Globe,
   Loader2,
+  User,
+  Mail,
   CheckCircle,
   XCircle,
   Clock,
+  Search,
+  Grid,
+  CheckSquare,
+  Square,
   Moon
 } from "lucide-react"
 
@@ -73,6 +79,12 @@ interface FormData {
   images: PresetImage[];
 }
 
+interface UserInfo {
+  id: string;
+  email: string;
+  username?: string;
+}
+
 interface DarkModeEgg {
   id: string;
   creation_id: string;
@@ -86,6 +98,108 @@ interface DarkModeEgg {
   priority: number;
 }
 
+// IndexedDB constants
+const DB_NAME = 'PresetsDB';
+const STORE_NAME = 'presets';
+const ALL_PRESETS_KEY = 'allPresets';
+const OWN_CREATIONS_KEY = 'ownCreations';
+
+// IndexedDB utility functions
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 2);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+      if (event.oldVersion < 2 && !db.objectStoreNames.contains('ownCreations')) {
+        db.createObjectStore('ownCreations');
+      }
+    };
+  });
+};
+
+const setItem = async (key: string, value: any, store: string = STORE_NAME): Promise<void> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(store, 'readwrite');
+    const objectStore = transaction.objectStore(store);
+    objectStore.put(value, key);
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+const getItem = async (key: string, store: string = STORE_NAME): Promise<any> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(store, 'readonly');
+    const objectStore = transaction.objectStore(store);
+    const request = objectStore.get(key);
+    
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Safe Image Component with optimized loading
+const SafeImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
+  const [imgSrc, setImgSrc] = useState(src);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  const handleError = () => {
+    console.warn('🖼️ Image failed to load:', { original: src });
+    setHasError(true);
+    setIsLoading(false);
+  };
+
+  const handleLoad = () => {
+    setIsLoading(false);
+  };
+
+  if (hasError) {
+    return (
+      <div className={`${className} bg-gray-200 flex items-center justify-center`}>
+        <ImageIcon className="text-gray-400" size={24} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${className} relative overflow-hidden`}>
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+          <Loader2 className="animate-spin text-gray-400" size={20} />
+        </div>
+      )}
+      <Image
+        src={imgSrc}
+        alt={alt}
+        fill
+        className={`object-cover ${isLoading ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
+        onError={handleError}
+        onLoad={handleLoad}
+        loading="lazy"
+        sizes="(max-width: 768px) 100px, (max-width: 1200px) 150px, 200px"
+      />
+    </div>
+  );
+};
+
 const Page = () => {
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get('q') || '';
@@ -96,7 +210,13 @@ const Page = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<string>('');
+  const [userInfo, setUserInfo] = useState<{ [key: string]: UserInfo }>({});
+
+  // Dark Mode State
   const [darkModeEggs, setDarkModeEggs] = useState<DarkModeEgg[]>([]);
+  const [togglingDarkMode, setTogglingDarkMode] = useState<string | null>(null);
+  const [showDarkModeModal, setShowDarkModeModal] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -112,75 +232,6 @@ const Page = () => {
   const sizes = [
     { value: 24, price: 0.99 },
   ];
-
-  // Check if preset is in dark mode
-  const isPresetInDarkMode = (presetId: string) => {
-    return darkModeEggs.some(egg => egg.creation_id === presetId && egg.is_active);
-  };
-
-// Toggle dark mode for preset
-const toggleDarkModeForPreset = async (presetId: string, presetImages: string[]) => {
-  try {
-    const existingEgg = darkModeEggs.find(egg => egg.creation_id === presetId);
-    
-    if (existingEgg) {
-      // Toggle existing egg
-      const { error } = await supabase
-        .from('dark_mode_eggs')
-        .update({ is_active: !existingEgg.is_active })
-        .eq('id', existingEgg.id);
-
-      if (error) {
-        console.error('Error toggling dark mode:', error);
-        alert('Failed to update dark mode');
-        return;
-      }
-
-      // Update local state
-      setDarkModeEggs(prev => 
-        prev.map(egg => 
-          egg.id === existingEgg.id 
-            ? { ...egg, is_active: !existingEgg.is_active }
-            : egg
-        )
-      );
-
-      alert(`Preset ${!existingEgg.is_active ? 'added to' : 'removed from'} dark mode`);
-    } else {
-      // Add new egg to dark mode
-      const firstImage = presetImages[0];
-      const presetItem = preset.find(p => p.id === presetId);
-      
-      const darkModeEggData = {
-        creation_id: presetId,
-        image_url: firstImage,
-        title: presetItem?.preset_name?.en_name || '',
-        prompt: presetItem?.preset_desc?.en_desc || '',
-        tags: [],
-        is_active: true,
-        created_by: presetItem?.created_by || null, // Use the preset's creator or null
-        priority: 0
-      };
-
-      const { error } = await supabase
-        .from('dark_mode_eggs')
-        .insert(darkModeEggData);
-
-      if (error) {
-        console.error('Error adding to dark mode:', error);
-        alert('Failed to add to dark mode');
-        return;
-      }
-
-      // Refresh dark mode eggs
-      fetchDarkModeEggs();
-      alert('Preset added to dark mode');
-    }
-  } catch (error) {
-    console.error('Error in toggleDarkModeForPreset:', error);
-    alert('An unexpected error occurred');
-  }
-};
 
   // Fetch dark mode eggs
   const fetchDarkModeEggs = async () => {
@@ -201,10 +252,87 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
     }
   };
 
+  // Check if preset is in dark mode
+  const isPresetInDarkMode = (presetId: string) => {
+    return darkModeEggs.some(egg => egg.creation_id === presetId && egg.is_active);
+  };
+
+  // Toggle dark mode for preset
+  const toggleDarkModeForPreset = async (presetId: string, presetImages: string[]) => {
+    setTogglingDarkMode(presetId);
+    
+    try {
+      const existingEgg = darkModeEggs.find(egg => egg.creation_id === presetId);
+      const presetItem = preset.find(p => p.id === presetId);
+      
+      if (existingEgg) {
+        // Toggle existing egg
+        const { error } = await supabase
+          .from('dark_mode_eggs')
+          .update({ is_active: !existingEgg.is_active })
+          .eq('id', existingEgg.id);
+
+        if (error) {
+          console.error('Error toggling dark mode:', error);
+          alert('Failed to update dark mode');
+          return;
+        }
+
+        // Update local state
+        setDarkModeEggs(prev => 
+          prev.map(egg => 
+            egg.id === existingEgg.id 
+              ? { ...egg, is_active: !existingEgg.is_active }
+              : egg
+          )
+        );
+
+        alert(`Preset ${!existingEgg.is_active ? 'added to' : 'removed from'} dark mode`);
+      } else {
+        // Add new egg to dark mode - USING FIRST IMAGE FROM PRESET
+        const darkModeEggData = {
+          creation_id: presetId,
+          image_url: presetImages[0], // Use first image from preset
+          title: presetItem?.preset_name?.en_name || '',
+          prompt: presetItem?.preset_desc?.en_desc || '',
+          tags: [],
+          is_active: true,
+          created_by: presetItem?.created_by || null,
+          priority: 0
+        };
+
+        const { error } = await supabase
+          .from('dark_mode_eggs')
+          .insert(darkModeEggData);
+
+        if (error) {
+          console.error('Error adding to dark mode:', error);
+          alert('Failed to add to dark mode');
+          return;
+        }
+
+        // Refresh dark mode eggs
+        fetchDarkModeEggs();
+        alert('Preset added to dark mode');
+      }
+    } catch (error) {
+      console.error('Error in toggleDarkModeForPreset:', error);
+      alert('An unexpected error occurred');
+    } finally {
+      setTogglingDarkMode(null);
+    }
+  };
+
+  // Handle dark mode management
+  const handleManageDarkMode = () => {
+    setShowDarkModeModal(true);
+  };
+
   // Filter presets based on search query
   useEffect(() => {
     let filtered = preset;
     
+    // Apply search filter
     if (searchQuery) {
       filtered = filtered.filter(item => 
         item.preset_name?.en_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -218,9 +346,34 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
     setFilteredPreset(filtered);
   }, [preset, searchQuery]);
 
+  // Fetch user info for creators
+  const fetchUserInfo = async (userId: string) => {
+    if (!userId || userInfo[userId]) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, username')
+        .eq('id', userId)
+        .single();
+      
+      if (data && !error) {
+        setUserInfo(prev => ({
+          ...prev,
+          [userId]: data
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    }
+  };
+
   useEffect(() => {
     const fetchAllPresets = async () => {
       try {
+        let allPresets: any[] = [];
+        setDataSource('Supabase');
+        
         const { data, error } = await supabase
           .from('presets')
           .select('*')
@@ -232,14 +385,28 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
           return;
         }
         
-        setPreset(data || []);
+        allPresets = data || [];
+        
+        allPresets.forEach(preset => {
+          if (preset.created_by) {
+            fetchUserInfo(preset.created_by);
+          }
+        });
+
+        try {
+          await setItem(ALL_PRESETS_KEY, allPresets);
+        } catch (indexedDBError) {
+          console.error("Error saving to IndexedDB:", indexedDBError);
+        }
+
+        setPreset(allPresets);
       } catch (err) {
         console.error("Unexpected error:", err);
       }
     };
 
     fetchAllPresets();
-    fetchDarkModeEggs();
+    fetchDarkModeEggs(); // Fetch dark mode eggs on component mount
 
     const channel = supabase
       .channel('public:presets')  
@@ -251,6 +418,8 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
           table: 'presets' 
         },
         async (payload) => {
+          setDataSource('Supabase Realtime');
+
           const { data, error } = await supabase
             .from('presets')
             .select('*')
@@ -262,7 +431,15 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
             return;
           }
           
-          setPreset(data || []);
+          const updatedPresets = data || [];
+          
+          try {
+            await setItem(ALL_PRESETS_KEY, updatedPresets);
+          } catch (indexedDBError) {
+            console.error("Error updating IndexedDB:", indexedDBError);
+          }
+          
+          setPreset(updatedPresets as Preset[]);
         }
       )
       .subscribe();
@@ -293,145 +470,173 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
     }));
   };
 
- const handleMakeLive = async (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  const activeImages = formData.images.filter(img => !img.markedForDeletion);
-  
-  if (activeImages.length === 0) {
-    alert("Please upload at least one image.");
-    return;
-  }
+  // Function to handle "Make Live" button click for both create and edit
+  const handleMakeLive = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // First validate the form
+    const activeImages = formData.images.filter(img => !img.markedForDeletion);
+    
+    if (activeImages.length === 0) {
+      alert("Please upload at least one image.");
+      return;
+    }
 
-  const requiredUniqueImages = Math.ceil(parseInt(String(formData.size.value)) / 2);
-  if (activeImages.length !== requiredUniqueImages) {
-    alert(`For a matching pairs game, you need exactly ${requiredUniqueImages} unique images (which will be duplicated to create ${formData.size.value} cards). Currently you have ${activeImages.length} images.`);
-    return;
-  }
+    const requiredUniqueImages = Math.ceil(parseInt(String(formData.size.value)) / 2);
+    if (activeImages.length !== requiredUniqueImages) {
+      alert(`For a matching pairs game, you need exactly ${requiredUniqueImages} unique images (which will be duplicated to create ${formData.size.value} cards). Currently you have ${activeImages.length} images.`);
+      return;
+    }
 
-  setIsLoading(true);
+    setIsLoading(true);
 
-  try {
-    const uploadedImageUrls: string[] = [];
+    try {
+      // Upload images and get URLs
+      const uploadedImageUrls: string[] = [];
 
-    for (let image of formData.images) {
-      if (image.markedForDeletion) continue;
-      
-      if (image.isExisting && image.originalUrl) {
-        uploadedImageUrls.push(image.originalUrl);
-      } else if (image.fileObject) {
-        const file = image.fileObject;
-        const fileExt = file.name.split(".").pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `presets/${fileName}`;
+      for (let image of formData.images) {
+        if (image.markedForDeletion) continue;
+        
+        if (image.isExisting && image.originalUrl) {
+          uploadedImageUrls.push(image.originalUrl);
+        } else if (image.fileObject) {
+          const file = image.fileObject;
+          const fileExt = file.name.split(".").pop();
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+          const filePath = `presets/${fileName}`;
 
-        let { error: uploadError } = await supabase.storage
+          let { error: uploadError } = await supabase.storage
+            .from("presets")
+            .upload(filePath, file);
+
+          if (uploadError) {
+            console.error("Error uploading image:", uploadError);
+            formData.images.forEach(img => {
+              if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          const { data: publicUrlData } = supabase.storage
+            .from("presets")
+            .getPublicUrl(filePath);
+
+          uploadedImageUrls.push(publicUrlData.publicUrl);
+          console.log("Uploaded new image:", publicUrlData.publicUrl);
+        }
+      }
+
+      const finalImageUrls = uploadedImageUrls;
+
+      // Clean up object URLs
+      formData.images.forEach(img => {
+        if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
+      });
+
+      // Get current user info for created_by field
+      const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = user?.id;
+      const adminUserId = searchParams.get('admin_user_id'); // Get admin user ID from URL if present
+
+      // Create preset data with approved status for immediate publishing
+      const presetData = {
+        preset_name: {
+          en_name: formData.titleEn,
+          de_name: formData.titleDe,
+        },
+        preset_desc: {
+          en_desc: formData.descEn,
+          de_desc: formData.descDe,
+        },
+        preset_size_json: formData.size,
+        preset_price: formData.price,
+        preset_images: finalImageUrls,
+        preset_status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: adminUserId || currentUserId, 
+        created_at: new Date().toISOString(),
+        created_by: currentUserId // Add created_by field
+      };
+
+      if (editingId) {
+        // Update existing preset
+        const { data, error } = await supabase
           .from("presets")
-          .upload(filePath, file);
+          .update(presetData)
+          .eq("id", editingId)
+          .select("*");
 
-        if (uploadError) {
-          console.error("Error uploading image:", uploadError);
-          formData.images.forEach(img => {
-            if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
-          });
+        if (error) {
+          console.error("Database error:", error);
+          alert(`Failed to update preset: ${error.message}`);
           setIsLoading(false);
           return;
         }
 
-        const { data: publicUrlData } = supabase.storage
+        alert("Preset updated and published successfully!");
+        
+        // Update local state and IndexedDB
+        const updatedPresets = preset.map(item => 
+          item.id === editingId ? data[0] : item
+        );
+        setPreset(updatedPresets);
+        
+        try {
+          await setItem(ALL_PRESETS_KEY, updatedPresets);
+        } catch (indexedDBError) {
+          console.error("Error updating IndexedDB:", indexedDBError);
+        }
+      } else {
+        // Create new preset
+        const { data, error } = await supabase
           .from("presets")
-          .getPublicUrl(filePath);
+          .insert(presetData)
+          .select("*");
 
-        uploadedImageUrls.push(publicUrlData.publicUrl);
+        if (error) {
+          console.error("Database error:", error);
+          alert(`Failed to create preset: ${error.message}`);
+          setIsLoading(false);
+          return;
+        }
+
+        alert("Preset created and published successfully!");
+        
+        // Update local state and IndexedDB
+        const updatedPresets = [...preset, data[0]];
+        setPreset(updatedPresets);
+        
+        try {
+          await setItem(ALL_PRESETS_KEY, updatedPresets);
+        } catch (indexedDBError) {
+          console.error("Error updating IndexedDB:", indexedDBError);
+        }
       }
+      
+      // Reset form and go back to list view
+      setCurrentView("list");
+      setEditingId(null);
+      setFormData({
+        titleEn: '', 
+        titleDe: '', 
+        descEn: '', 
+        descDe: '', 
+        size: { value: '', price: 0 }, 
+        price: '', 
+        images: [] 
+      });
+
+    } catch (err) {
+      console.error("Unexpected error in handleMakeLive:", err);
+      formData.images.forEach(img => {
+        if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
+      });
+      alert("An unexpected error occurred. Please check console for details.");
+    } finally {
+      setIsLoading(false);
     }
-
-    const finalImageUrls = uploadedImageUrls;
-
-    // Clean up object URLs
-    formData.images.forEach(img => {
-      if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
-    });
-
-    const adminUserId = searchParams.get('admin_user_id');
-
-    const presetData = {
-      preset_name: {
-        en_name: formData.titleEn,
-        de_name: formData.titleDe,
-      },
-      preset_desc: {
-        en_desc: formData.descEn,
-        de_desc: formData.descDe,
-      },
-      preset_size_json: formData.size,
-      preset_price: formData.price,
-      preset_images: finalImageUrls,
-      preset_status: 'approved',
-      approved_at: new Date().toISOString(),
-      approved_by: adminUserId || null, // Use null instead of 'admin'
-      created_at: new Date().toISOString(),
-      created_by: adminUserId || null // Use null instead of 'admin'
-    };
-
-    if (editingId) {
-      const { data, error } = await supabase
-        .from("presets")
-        .update(presetData)
-        .eq("id", editingId)
-        .select("*");
-
-      if (error) {
-        console.error("Database error:", error);
-        alert(`Failed to update preset: ${error.message}`);
-        setIsLoading(false);
-        return;
-      }
-
-      alert("Preset updated successfully!");
-      const updatedPresets = preset.map(item => 
-        item.id === editingId ? data[0] : item
-      );
-      setPreset(updatedPresets);
-    } else {
-      const { data, error } = await supabase
-        .from("presets")
-        .insert(presetData)
-        .select("*");
-
-      if (error) {
-        console.error("Database error:", error);
-        alert(`Failed to create preset: ${error.message}`);
-        setIsLoading(false);
-        return;
-      }
-
-      alert("Preset created successfully!");
-      setPreset(prev => [...prev, data[0]]);
-    }
-    
-    setCurrentView("list");
-    setEditingId(null);
-    setFormData({
-      titleEn: '', 
-      titleDe: '', 
-      descEn: '', 
-      descDe: '', 
-      size: { value: '', price: 0 }, 
-      price: '', 
-      images: [] 
-    });
-
-  } catch (err) {
-    console.error("Unexpected error in handleMakeLive:", err);
-    formData.images.forEach(img => {
-      if (img.fileObject) URL.revokeObjectURL(img.previewUrl);
-    });
-    alert("An unexpected error occurred.");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this preset?")) {
@@ -468,7 +673,14 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
         return;
       }
 
-      setPreset(prev => prev.filter(item => item.id !== id));
+      const updatedPresets = preset.filter(item => item.id !== id);
+      setPreset(updatedPresets);
+      try {
+        await setItem(ALL_PRESETS_KEY, updatedPresets);
+      } catch (indexedDBError) {
+        console.error("Error updating IndexedDB:", indexedDBError);
+      }
+      
       alert("Preset deleted successfully!");
 
     } catch (err) {
@@ -511,7 +723,7 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
     const requiredImageCount = Math.ceil(parseInt(String(formData.size.value)) / 2);
     
     if (imageToRemove.isExisting && currentImageCount <= requiredImageCount) {
-      if (!confirm(`Removing this image would make your preset incomplete. You need ${requiredImageCount} unique images. Are you sure you want to remove it?`)) {
+      if (!confirm(`Removing this image would make your preset incomplete. You need ${requiredImageCount} unique images (which will be duplicated to create ${formData.size.value} cards). Are you sure you want to remove it?`)) {
         return;
       }
     }
@@ -523,6 +735,7 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
           i === index ? { ...img, markedForDeletion: true } : img
         )
       }));
+      console.log("Marked existing image for deletion:", imageToRemove.originalUrl);
     } else {
       if (imageToRemove.fileObject) {
         URL.revokeObjectURL(imageToRemove.previewUrl);
@@ -531,6 +744,7 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
         ...prev,
         images: prev.images.filter((_, i) => i !== index)
       }));
+      console.log("Removed new image from form");
     }
   };
 
@@ -568,9 +782,16 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
               {editingId ? 'Edit Preset' : 'Create New Preset'}
             </h1>
           </div>
+          <p className="text-gray-600">
+            {editingId 
+              ? 'Update the preset information below and click "Make Live" to publish changes.' 
+              : 'Fill out the form below to create a new egg card preset. Use "Make Live" to publish it immediately.'
+            }
+          </p>
         </div>
 
         <form className="space-y-6" onSubmit={handleMakeLive}>
+          {/* Titles Section */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
               <Tag className="text-[#e6d281] mr-2" size={20} />
@@ -606,6 +827,7 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
             </div>
           </div>
       
+          {/* Descriptions Section */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
               <Edit className="text-[#e6d281] mr-2" size={20} />
@@ -613,7 +835,7 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="desc-en" className="block text-sm font-medium text-gray-700 mb-1">Description (English)</label>
+                <label htmlFor="desc-en" className="block text-sm font-medium text-gray-700 mb-1">Description (English) - Optional</label>
                 <textarea 
                   onChange={handleInputChange} 
                   id="desc-en" 
@@ -621,11 +843,11 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
                   rows={3} 
                   value={formData.descEn}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
-                  placeholder="A beautiful collection of spring flower designs"
+                  placeholder="A beautiful collection of spring flower designs for your egg memory game."
                 ></textarea>
               </div>
               <div>
-                <label htmlFor="desc-de" className="block text-sm font-medium text-gray-700 mb-1">Description (German)</label>
+                <label htmlFor="desc-de" className="block text-sm font-medium text-gray-700 mb-1">Description (German) - Optional</label>
                 <textarea 
                   onChange={handleInputChange} 
                   id="desc-de" 
@@ -633,11 +855,12 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
                   rows={3} 
                   value={formData.descDe}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
-                  placeholder="Eine wunderschöne Kollektion von Frühlingsblumen-Designs"
+                  placeholder="Eine wunderschöne Kollektion von Frühlingsblumen-Designs für Ihr Eier-Memory-Spiel."
                 ></textarea>
               </div>
             </div>
           </div>
+    
 
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
@@ -648,37 +871,38 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
               <div>
                 <label htmlFor="size" className="block text-sm font-medium text-gray-700 mb-1">Preset Size</label>
                 <div className="relative">
-                  <select
-                    name="size"
-                    value={formData.size?.value || ""}
-                    onChange={(e) => {
-                      const selectedValue = e.target.value;
-                      const selectedSize = sizes.find(
-                        (s) => s.value.toString() === selectedValue
-                      );
-                      if (selectedSize) {
-                        setFormData((prev) => ({
-                          ...prev,
-                          size: selectedSize,
-                          price: selectedSize.price.toFixed(2),
-                        }));
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
-                  >
-                    <option value="">Select a size</option>
-                    {sizes.map(({ value, price }) => (
-                      <option key={value} value={value}>
-                        {value} cards - €{price.toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
+                <select
+                name="size"
+                value={formData.size?.value || ""}
+                onChange={(e) => {
+                  const selectedValue = e.target.value;
+                  const selectedSize = sizes.find(
+                    (s) => s.value.toString() === selectedValue
+                  );
+                  if (selectedSize) {
+                    setFormData((prev) => ({
+                      ...prev,
+                      size: selectedSize,
+                      price: selectedSize.price.toFixed(2),
+                    }));
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
+              >
+                <option value="">Select a size</option>
+                {sizes.map(({ value, price }) => (
+                  <option key={value} value={value}>
+                    {value} cards - €{price.toFixed(2)}
+                  </option>
+                ))}
+              </select>
+
                   <ChevronDown className="absolute right-3 top-3 text-gray-400" size={16} />
                 </div>
               </div>
               <div>
                 <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-                  Price (€)
+                  Price (€) - Auto-calculated
                 </label>
                 <div className="relative">
                   <input 
@@ -695,10 +919,14 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
                   />
                   <DollarSign className="absolute left-3 top-3 text-gray-400" size={16} />
                 </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Price is automatically calculated based on the selected size
+                </p>
               </div>
             </div>
           </div>
       
+          {/* Images Upload Section */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
               <ImageIcon className="text-[#e6d281] mr-2" size={20} />
@@ -706,7 +934,15 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
             </h2>
             
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <div className="flex-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-[#e6d281] transition-colors cursor-pointer">
+              <div 
+                className="flex-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-[#e6d281] transition-colors cursor-pointer"
+                onClick={() => {
+                  if(!formData.size.value){
+                    alert("Please select a size first"); 
+                    return;
+                  }
+                }}
+              >
                 <div className="space-y-1 text-center">
                   <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
                   <div className="flex text-sm text-gray-600 justify-center">
@@ -742,7 +978,7 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
 
             {formData.size.value && (
               <p className="text-xs text-[#e6d281] mb-4 text-center">
-                Selected size requires {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images
+                Selected size requires {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images (will be duplicated to create {formData.size.value} cards)
               </p>
             )}
 
@@ -750,12 +986,20 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
               <div className="mt-6">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
                   <ImageIcon className="mr-2" size={16} />
-                  Selected Images ({formData.images.filter(img => !img.markedForDeletion).length}/{Math.ceil(parseInt(String(formData.size.value || '0')) / 2)})
+                  Selected Images ({formData.images.filter(img => !img.markedForDeletion).length}/{Math.ceil(parseInt(String(formData.size.value || '0')) / 2)} unique)
+                  {editingId && (
+                    <span className="ml-2 text-xs text-blue-600">
+                      (Existing: {formData.images.filter(img => img.isExisting && !img.markedForDeletion).length}, 
+                      New: {formData.images.filter(img => !img.isExisting).length},
+                      To be deleted: {formData.images.filter(img => img.markedForDeletion).length})
+                    </span>
+                  )}
                 </h3>
                 
                 {formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2) && (
                   <p className="text-sm text-red-500 mt-2 mb-3">
-                    ⚠️ You need exactly {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images
+                    ⚠️ Warning: You need exactly {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images for this preset size (which will be duplicated to create ${formData.size.value} cards). 
+                    Currently you have {formData.images.filter(img => !img.markedForDeletion).length} active images.
                   </p>
                 )}
                 
@@ -793,6 +1037,7 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
             )}
           </div>
       
+          {/* Form Actions */}
           <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
             <button 
               type="button"
@@ -814,6 +1059,7 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
               Cancel
             </button>
 
+            {/* Make Live Button - For both new and edit modes */}
             <button 
               type="submit"
               disabled={isLoading || (!!formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2))}
@@ -824,9 +1070,19 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
               ) : (
                 <Globe className="mr-2" size={16} />
               )}
-              {isLoading ? 'Publishing...' : (editingId ? 'Update Preset' : 'Create Preset')}
+              {isLoading ? 'Publishing...' : (editingId ? 'Update & Make Live' : 'Make Live')}
             </button>
           </div>
+          
+          {/* Show message when button is disabled due to image count */}
+          {formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2) && !isLoading && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-sm text-yellow-800">
+                <span className="font-medium">⚠️ Cannot submit:</span> You need exactly {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images for this preset size. 
+                Currently you have {formData.images.filter(img => !img.markedForDeletion).length} active images.
+              </p>
+            </div>
+          )}
         </form>
       </div>
     );
@@ -834,12 +1090,70 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Dark Mode Management Modal */}
+      {showDarkModeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                <Moon className="mr-2 text-purple-600" size={20} />
+                Dark Mode Management
+              </h3>
+              <button 
+                onClick={() => setShowDarkModeModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-gray-600">
+                Manage which presets are available in dark mode. Presets marked for dark mode will appear 
+                when users switch to dark theme.
+              </p>
+              
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <h4 className="font-medium text-purple-800 mb-2 flex items-center">
+                  <CheckCircle className="mr-2" size={16} />
+                  Current Dark Mode Presets
+                </h4>
+                <p className="text-sm text-purple-700">
+                  {darkModeEggs.filter(egg => egg.is_active).length} presets currently enabled for dark mode
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  onClick={() => setShowDarkModeModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDarkModeModal(false);
+                    // Navigate to detailed dark mode management
+                    window.location.href = '/dashboard/ownCreations';
+                  }}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-md flex items-center"
+                >
+                  <Moon className="mr-2" size={16} />
+                  View Detailed Management
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
           <div className='mb-4 md:mb-0'>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">Presets Management</h1>
             <p className="text-gray-600">Manage approved presets and dark mode eligibility.</p>
             
+            {/* Search Status */}
             {searchQuery && (
               <div className="mt-2">
                 <p className="text-sm text-gray-600">
@@ -853,6 +1167,16 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
           </div>
     
           <div className="flex flex-col sm:flex-row gap-3">
+            {/* Dark Mode Management Button - NEW BUTTON */}
+            <button
+              onClick={handleManageDarkMode}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200 shadow-sm flex items-center"
+            >
+              <Moon className="mr-2" size={16} />
+              Manage Dark Mode
+            </button>
+            
+            {/* Existing Create Preset Button */}
             <button
               onClick={() => setCurrentView('create')}
               className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 shadow-sm flex items-center"
@@ -922,9 +1246,14 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
                                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                               }`}
                               title={isInDarkMode ? 'Remove from dark mode' : 'Add to dark mode'}
+                              disabled={togglingDarkMode === item.id}
                             >
-                              <Moon className="mr-1" size={14} />
-                              {isInDarkMode ? 'Dark Mode' : 'Add to Dark'}
+                              {togglingDarkMode === item.id ? (
+                                <Loader2 className="mr-1 animate-spin" size={14} />
+                              ) : (
+                                <Moon className="mr-1" size={14} />
+                              )}
+                              {togglingDarkMode === item.id ? '...' : (isInDarkMode ? 'Dark Mode' : 'Add to Dark')}
                             </button>
                             <button 
                               onClick={() => handleDelete(item.id)} 
@@ -1017,10 +1346,10 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
                     <div className="flex gap-3 overflow-x-auto pb-2">
                       {item.preset_images?.map((imageUrl: string, index: number) => (
                         <div key={index} className="flex-shrink-0 h-[100px] w-[100px] overflow-hidden rounded-md border border-gray-200">
-                          <img 
-                            src={imageUrl} 
+                          <SafeImage
+                            src={imageUrl}
                             alt={`Preset image ${index + 1}`}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full"
                           />
                         </div>
                       ))}
@@ -1046,13 +1375,23 @@ const toggleDarkModeForPreset = async (presetId: string, presetImages: string[])
                 : 'Get started by creating your first preset.'
               }
             </p>
-            <button
-              onClick={() => setCurrentView('create')}
-              className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
-            >
-              <PlusCircle className="mr-2" size={16} />
-              Create Preset
-            </button>
+            {isLoading ? (
+              <button
+                onClick={() => setCurrentView('create')}
+                className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
+              >
+                <Loader2 className="mr-2" size={16} />
+                Creating Preset...
+              </button>
+            ):(
+              <button
+                onClick={() => setCurrentView('create')}
+                className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
+              >
+                <PlusCircle className="mr-2" size={16} />
+                Create Preset
+              </button>
+            )}
           </div>
         </div>
       )}
