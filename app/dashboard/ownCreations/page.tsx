@@ -34,7 +34,7 @@ interface Creation {
     name: string | null;
     avatar_url: string | null;
   };
-  tags: string[];
+  tags?: string[];
   likes: number;
   downloads: number;
   created_at: string;
@@ -55,14 +55,12 @@ interface DarkModeEgg {
   image_url: string;
   title?: string;
   prompt?: string;
-  tags?: string[];
   is_active: boolean;
   created_at: string;
   created_by: string;
-  priority: number;
 }
 
-// IndexedDB utility functions (same as before)
+// IndexedDB utility functions
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('CreationsDB', 1);
@@ -173,11 +171,11 @@ const OwnCreations = () => {
 
   const itemsPerBatch = 100;
 
-  // Fetch dark mode eggs - USING dark_mode_eggs TABLE
+  // Fetch dark mode eggs
   const fetchDarkModeEggs = async () => {
     try {
       const { data, error } = await supabase
-        .from('dark_mode_eggs')  // ✅ Changed to dark_mode_eggs
+        .from('dark_mode_eggs')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -197,7 +195,7 @@ const OwnCreations = () => {
     return darkModeEggs.some(egg => egg.creation_id === creationId && egg.is_active);
   };
 
-  // Toggle dark mode for creation - USING dark_mode_eggs TABLE
+  // Toggle dark mode for creation - TAGS REMOVED
   const toggleDarkModeForCreation = async (creationId: string, creationData: Creation) => {
     setTogglingDarkMode(creationId);
     
@@ -207,7 +205,7 @@ const OwnCreations = () => {
       if (existingEgg) {
         // Toggle existing egg
         const { error } = await supabase
-          .from('dark_mode_eggs')  // ✅ Changed to dark_mode_eggs
+          .from('dark_mode_eggs')
           .update({ is_active: !existingEgg.is_active })
           .eq('id', existingEgg.id);
 
@@ -228,20 +226,18 @@ const OwnCreations = () => {
 
         showNotification('success', `Creation ${!existingEgg.is_active ? 'added to' : 'removed from'} dark mode`);
       } else {
-        // Add new egg to dark mode - USING SAME IMAGE
+        // Add new egg to dark mode - TAGS REMOVED
         const darkModeEggData = {
           creation_id: creationId,
-          image_url: creationData.image_url, // SAME image as light mode
+          image_url: creationData.image_url,
           title: creationData.title || '',
           prompt: creationData.prompt || '',
-          tags: creationData.tags || [],
           is_active: true,
           created_by: creationData.creator_id,
-          priority: 0
         };
 
         const { error } = await supabase
-          .from('dark_mode_eggs')  // ✅ Changed to dark_mode_eggs
+          .from('dark_mode_eggs')
           .insert(darkModeEggData);
 
         if (error) {
@@ -262,7 +258,7 @@ const OwnCreations = () => {
     }
   };
 
-  // Bulk add to dark mode
+  // Bulk add to dark mode - TAGS REMOVED
   const bulkAddToDarkMode = async () => {
     if (selectedForDarkMode.length === 0) {
       showNotification('error', 'Please select at least one creation for dark mode');
@@ -286,10 +282,8 @@ const OwnCreations = () => {
             image_url: creation.image_url,
             title: creation.title || '',
             prompt: creation.prompt || '',
-            tags: creation.tags || [],
             is_active: true,
             created_by: creation.creator_id,
-            priority: 0
           };
 
           const { error } = await supabase
@@ -1302,7 +1296,12 @@ const OwnCreations = () => {
             <div className="p-6 border-t border-gray-200 bg-gray-50">
               <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
                 <div className="flex gap-2">
-                
+                  <button
+                    onClick={autoSelectForDarkMode}
+                    className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
+                  >
+                    Select All Visible
+                  </button>
                   <button
                     onClick={clearDarkModeSelection}
                     className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"

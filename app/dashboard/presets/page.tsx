@@ -91,11 +91,11 @@ interface DarkModeEgg {
   image_url: string;
   title?: string;
   prompt?: string;
-  tags?: string[];
+ 
   is_active: boolean;
   created_at: string;
   created_by: string;
-  priority: number;
+ 
 }
 
 // IndexedDB constants
@@ -295,10 +295,9 @@ const Page = () => {
           image_url: presetImages[0], // Use first image from preset
           title: presetItem?.preset_name?.en_name || '',
           prompt: presetItem?.preset_desc?.en_desc || '',
-          tags: [],
           is_active: true,
           created_by: presetItem?.created_by || null,
-          priority: 0
+         
         };
 
         const { error } = await supabase
