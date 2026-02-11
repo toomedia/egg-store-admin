@@ -33,6 +33,7 @@ interface User {
   status: string;
   created_at: string;
   avatar_url: string | null;
+  isAdmin: boolean;
 }
 
 const AdminManager = () => {
@@ -253,21 +254,51 @@ const AdminManager = () => {
     if (newRole === '') return;
     
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ role: newRole })
-        .eq('id', userId);
+      // Set isAdmin to true when role is admin
+      const isAdmin = newRole === 'admin';
+      
+      // First try using auth admin API (doesn't rely on schema cache)
+      const { error: authError } = await supabase.auth.admin.updateUserById(
+        userId,
+        { 
+          user_metadata: { role: newRole, isAdmin: isAdmin }
+        }
+      );
 
-      if (error) {
-        showNotification('error', `Failed to update role: ${error.message}`);
-        throw error;
+      if (!authError) {
+        showNotification('success', 'User role updated successfully');
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, role: newRole, isAdmin: isAdmin } : user
+        ));
+        return;
+      }
+
+      // Fallback: Try direct update bypassing schema cache
+      // Using a different approach that doesn't cache the schema
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${userId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({ role: newRole, isAdmin: isAdmin })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       showNotification('success', 'User role updated successfully');
       setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, role: newRole } : user
+        user.id === userId ? { ...user, role: newRole, isAdmin: newRole === 'admin' } : user
       ));
-    } catch (error) {
+    } catch (error: any) {
+      showNotification('error', `Failed to update role: ${error.message || 'Unknown error'}`);
     }
   };
 
