@@ -30,7 +30,6 @@ interface User {
   email: string;
   name: string | null;
   role: string;
-  status: string;
   created_at: string;
   avatar_url: string | null;
   isAdmin: boolean;
@@ -43,7 +42,6 @@ const AdminManager = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [editUser, setEditUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSendingInvite, setIsSendingInvite] = useState(false);
@@ -55,7 +53,6 @@ const AdminManager = () => {
   
   const itemsPerPage = 10;
   const roles = ['admin'];
-  const statuses = ['active', 'inactive', 'pending'];
 
   // IndexedDB constants
   const DB_NAME = 'egg-store-db';
@@ -229,13 +226,10 @@ const AdminManager = () => {
         roleFilter === 'all' || 
         user.role === roleFilter;
       
-      const matchesStatus = 
-        statusFilter === 'all' || 
-        user.status === statusFilter;
 
-      return matchesSearch && matchesRole && matchesStatus;
+      return matchesSearch && matchesRole;
     });
-  }, [users, searchQuery, roleFilter, statusFilter]);
+  }, [users, searchQuery, roleFilter]);
   
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -299,68 +293,6 @@ const AdminManager = () => {
       ));
     } catch (error: any) {
       showNotification('error', `Failed to update role: ${error.message || 'Unknown error'}`);
-    }
-  };
-
-  const handleStatusChange = async (userId: string, newStatus: string) => {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ status: newStatus })
-        .eq('id', userId);
-
-      if (error) {
-        showNotification('error', `Failed to update status: ${error.message}`);
-        throw error;
-      }
-      showNotification('success', 'User status updated successfully');
-      
-      setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, status: newStatus } : user
-      ));
-    } catch (error) {
-    }
-  };
-
-  const handleActivateUser = async (userId: string) => {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ status: 'active' })
-        .eq('id', userId);
-
-      if (error) {
-        showNotification('error', `Failed to activate user: ${error.message}`);
-        throw error;
-      }
-      showNotification('success', 'User activated successfully');
-      
-      setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, status: 'active' } : user
-      ));
-    } catch (error) {
-    }
-  };
-
-  const handleDeactivateUser = async (userId: string) => {
-
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ status: 'inactive' })
-        .eq('id', userId);
-
-      if (error) {
-        showNotification('error', `Failed to deactivate user: ${error.message}`);
-        throw error;
-      }
-
-      showNotification('success', 'User deactivated successfully');
-      
-      setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, status: 'inactive' } : user
-      ));
-    } catch (error) {
     }
   };
 
@@ -454,7 +386,6 @@ const AdminManager = () => {
         .from('users')
         .insert({
           email,
-          status: 'pending',
           role: role
         })
         .select()
@@ -498,8 +429,7 @@ const AdminManager = () => {
         .from('users')
         .update({
           name: editUser.name,
-          role: editUser.role,
-          status: editUser.status
+          role: editUser.role
         })
         .eq('id', editUser.id);
 
@@ -694,22 +624,18 @@ const AdminManager = () => {
           
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Filter className="text-gray-400" size={16} />
+              <Search className="text-gray-400" size={16} />
             </div>
-            <select
-              className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
-              value={statusFilter}
+            <input
+              type="text"
+              className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
+              placeholder="Search users..."
+              value={searchQuery}
               onChange={(e) => {
-                setStatusFilter(e.target.value);
+                setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-            >
-              <option value="all">All Statuses</option>
-              {statuses.map((status) => (
-                <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-3 text-gray-400" size={16} />
+            />
           </div>
           {selectedUsers.length > 0 && (
             <div className="flex items-center gap-2">
@@ -754,19 +680,6 @@ const AdminManager = () => {
                   onChange={(e) => setEditUser({...editUser, role: e.target.value})}
                 >
                   <option value="admin">Admin</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={editUser.status}
-                  onChange={(e) => setEditUser({...editUser, status: e.target.value})}
-                >
-                  {statuses.map(status => (
-                    <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>
-                  ))}
                 </select>
               </div>
               
@@ -832,9 +745,6 @@ const AdminManager = () => {
                       Role
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Joined
                     </th>
                     <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -891,70 +801,17 @@ const AdminManager = () => {
                           <option value="admin">Admin</option>
                         </select>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            user.status === 'active' ? 'bg-green-100 text-green-800' :
-                            user.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {user.status === 'active' ? (
-                              <CheckCircle className="mr-1" size={12} />
-                            ) : user.status === 'inactive' ? (
-                              <XCircle className="mr-1" size={12} />
-                            ) : (
-                              <Loader2 className="mr-1 animate-spin" size={12} />
-                            )}
-                            {(user.status || 'inactive').charAt(0).toUpperCase() + (user.status || 'inactive').slice(1)}
-                          </span>
-                        </div>
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(user.created_at)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end items-center space-x-2">
                           <button
-                            className="text-gray-600 hover:text-[#e6d281] p-1"
-                            onClick={() => {
-                              setEditUser(user);
-                              setIsEditing(true);
-                            }}
-                          >
-                            <Edit size={16} />
-                          </button>
-                          {user.status === 'active' ? (
-                            <button
-                              className="text-gray-600 hover:text-orange-500 p-1"
-                              onClick={() => handleDeactivateUser(user.id)}
-                              title="Deactivate user"
-                            >
-                              <Lock size={16} />
-                            </button>
-                          ) : (
-                            <button
-                              className="text-gray-600 hover:text-green-500 p-1"
-                              onClick={() => handleActivateUser(user.id)}
-                              title="Activate user"
-                            >
-                              <Unlock size={16} />
-                            </button>
-                          )}
-                          <button
                             className="text-gray-600 hover:text-red-500 p-1"
                             onClick={() => handleDeleteUser(user.id)}
                           >
                             <Trash2 size={16} />
                           </button>
-                          {user.status === 'pending' && (
-                            <button
-                              className="text-gray-600 hover:text-green-500 p-1"
-                              onClick={() => handleSendInvite(user.email, user.role)}
-                              title="Resend invite"
-                            >
-                              <Mail size={16} />
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
