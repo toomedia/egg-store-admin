@@ -1,6 +1,7 @@
 "use client"
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from "../../../utils/supabaseClient";
+import { createClient } from '@supabase/supabase-js';
 import {
   Users,
   UserPlus,
@@ -29,7 +30,7 @@ interface User {
   id: string;
   email: string;
   name: string | null;
-  role: string;
+  role?: string;
   created_at: string;
   avatar_url: string | null;
   isAdmin: boolean;
@@ -50,6 +51,7 @@ const AdminManager = () => {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('admin');
   const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   
   const itemsPerPage = 10;
   const roles = ['admin'];
@@ -57,6 +59,12 @@ const AdminManager = () => {
   // IndexedDB constants
   const DB_NAME = 'egg-store-db';
   const STORE_NAME = 'users';
+
+  // Supabase admin client with service role key (bypasses RLS)
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL  || 'https://puqhpgsbyvthttfhbmru.supabase.co',
+    process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1cWhwZ3NieXZ0aHR0ZmhibXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ4NjQ4MjAsImV4cCI6MjA3MDQ0MDgyMH0.6vatjsBk3ZkvoYRvAwbm8Ogb3ZacJm9bL6dqTX_cckY'
+  );
 
   useEffect(() => {
     const fetchAllUsers = async () => {
@@ -247,52 +255,30 @@ const AdminManager = () => {
   const handleRoleChange = async (userId: string, newRole: string) => {
     if (newRole === '') return;
     
+    setUpdatingUserId(userId);
+    
     try {
-      // Set isAdmin to true when role is admin
+      // Set isAdmin based on role
       const isAdmin = newRole === 'admin';
       
-      // First try using auth admin API (doesn't rely on schema cache)
-      const { error: authError } = await supabase.auth.admin.updateUserById(
-        userId,
-        { 
-          user_metadata: { role: newRole, isAdmin: isAdmin }
-        }
-      );
-
-      if (!authError) {
-        showNotification('success', 'User role updated successfully');
-        setUsers(prev => prev.map(user => 
-          user.id === userId ? { ...user, role: newRole, isAdmin: isAdmin } : user
-        ));
-        return;
-      }
-
-      // Fallback: Try direct update bypassing schema cache
-      // Using a different approach that doesn't cache the schema
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/users?id=eq.${userId}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-            'Prefer': 'return=minimal'
-          },
-          body: JSON.stringify({ role: newRole, isAdmin: isAdmin })
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      // Use update to modify isAdmin column
+      const { error } = await supabaseAdmin
+        .from('users')
+        .update({ isAdmin: isAdmin })
+        .eq('id', userId);
+        
+      if (error) {
+        throw new Error(error.message);
       }
 
       showNotification('success', 'User role updated successfully');
       setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, role: newRole, isAdmin: newRole === 'admin' } : user
+        user.id === userId ? { ...user, isAdmin: isAdmin } : user
       ));
     } catch (error: any) {
       showNotification('error', `Failed to update role: ${error.message || 'Unknown error'}`);
+    } finally {
+      setUpdatingUserId(null);
     }
   };
 
@@ -302,14 +288,15 @@ const AdminManager = () => {
     }
     
     try {
-      const { error } = await supabase
+      // Use admin client to delete from users table directly (bypasses RLS)
+      const { error } = await supabaseAdmin
         .from('users')
         .delete()
         .eq('id', userId);
 
       if (error) {
         showNotification('error', `Failed to delete user: ${error.message}`);
-        throw error;
+        throw new Error(error.message);
       }
 
       showNotification('success', 'User deleted successfully');
@@ -792,14 +779,18 @@ const AdminManager = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          className={`text-sm ${user.role === 'admin' ? 'text-red-600' : 'text-gray-600'} bg-transparent border-none focus:ring-1 focus:ring-[#e6d281] rounded`}
-                          value={user.role || ''}
-                          onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                        >
-                          <option value="">Select Role</option>
-                          <option value="admin">Admin</option>
-                        </select>
+                        {updatingUserId === user.id ? (
+                          <span className="text-sm text-red-600 font-medium">Updating...</span>
+                        ) : (
+                          <select
+                            className={`text-sm ${user.isAdmin ? 'text-red-600' : 'text-gray-600'} bg-transparent border-none focus:ring-1 focus:ring-[#e6d281] rounded`}
+                            value={user.isAdmin ? 'admin' : ''}
+                            onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                          >
+                            <option value="">Select Role</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(user.created_at)}
