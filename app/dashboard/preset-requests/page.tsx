@@ -10,6 +10,8 @@ import {
   Calendar,
   Edit,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   X,
   Loader2,
   Mail,
@@ -324,6 +326,124 @@ const RejectionModal = ({
   );
 };
 
+const ImageLightboxModal = ({
+  isOpen,
+  images,
+  initialIndex,
+  onClose,
+}: {
+  isOpen: boolean;
+  images: string[];
+  initialIndex: number;
+  onClose: () => void;
+}) => {
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    if (isOpen) {
+      const safe = Math.max(0, Math.min(initialIndex, Math.max(0, images.length - 1)));
+      setIdx(safe);
+    }
+  }, [isOpen, initialIndex, images]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && images.length > 1) {
+        e.preventDefault();
+        setIdx((i) => (i > 0 ? i - 1 : images.length - 1));
+      }
+      if (e.key === 'ArrowRight' && images.length > 1) {
+        e.preventDefault();
+        setIdx((i) => (i < images.length - 1 ? i + 1 : 0));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, images.length, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
+  if (!isOpen || images.length === 0) return null;
+
+  const src = images[idx];
+  const showNav = images.length > 1;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-8 bg-black/85 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Image preview"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 z-[70] rounded-full p-2.5 text-white/90 hover:bg-white/10 hover:text-white transition-colors"
+        aria-label="Close"
+      >
+        <X size={24} />
+      </button>
+
+      {showNav && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIdx((i) => (i > 0 ? i - 1 : images.length - 1));
+            }}
+            className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 z-[70] rounded-full p-2 sm:p-3 text-white/90 hover:bg-white/10 transition-colors flex"
+            aria-label="Previous image"
+          >
+            <ChevronLeft size={28} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIdx((i) => (i < images.length - 1 ? i + 1 : 0));
+            }}
+            className="absolute right-1 sm:right-4 top-1/2 -translate-y-1/2 z-[70] rounded-full p-2 sm:p-3 text-white/90 hover:bg-white/10 transition-colors flex"
+            aria-label="Next image"
+          >
+            <ChevronRight size={28} />
+          </button>
+        </>
+      )}
+
+      <div
+        className="relative w-full max-w-5xl max-h-[min(85vh,900px)] aspect-[4/3] sm:aspect-auto sm:h-[min(85vh,900px)] sm:min-h-[200px]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Image
+          src={src}
+          alt=""
+          fill
+          className="object-contain"
+          sizes="(max-width: 1280px) 100vw, 1024px"
+          priority
+        />
+      </div>
+
+      {showNav && (
+        <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm text-white/70 tabular-nums">
+          {idx + 1} / {images.length}
+        </p>
+      )}
+    </div>
+  );
+};
+
 const Page = () => {
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get('q') || '';
@@ -342,6 +462,8 @@ const Page = () => {
     presetId: '',
     presetName: ''
   });
+  const [imageLightbox, setImageLightbox] = useState<{ images: string[]; index: number } | null>(null);
+
   const [rejectionModal, setRejectionModal] = useState<{ isOpen: boolean; presetId: string; presetName: string }>({
     isOpen: false,
     presetId: '',
@@ -1334,6 +1456,13 @@ const Page = () => {
         presetName={rejectionModal.presetName}
       />
 
+      <ImageLightboxModal
+        isOpen={imageLightbox !== null}
+        images={imageLightbox?.images ?? []}
+        initialIndex={imageLightbox?.index ?? 0}
+        onClose={() => setImageLightbox(null)}
+      />
+
       <div className="max-w-6xl mx-auto px-5 sm:px-8 py-10 md:py-12">
         <div className="flex items-end justify-between mb-10 flex-wrap gap-6">
           <div>
@@ -1383,12 +1512,20 @@ const Page = () => {
                     <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2.5">Preview</p>
                     <div className="grid grid-cols-4 sm:grid-cols-6 gap-2.5">
                       {(item.preset_images || []).slice(0, 12).map((url, i) => (
-                        <div
+                        <button
                           key={i}
-                          className="aspect-square rounded-xl overflow-hidden bg-gray-100 ring-1 ring-gray-100"
+                          type="button"
+                          className="aspect-square rounded-xl overflow-hidden bg-gray-100 ring-1 ring-gray-100 cursor-zoom-in hover:ring-2 hover:ring-[#e6d281]/50 transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e6d281] focus-visible:ring-offset-2 text-left"
+                          onClick={() =>
+                            setImageLightbox({
+                              images: (item.preset_images || []).slice(0, 12),
+                              index: i,
+                            })
+                          }
+                          aria-label={`Open image ${i + 1} in preview`}
                         >
-                          <SafeImage src={url} alt="" className="w-full h-full" />
-                        </div>
+                          <SafeImage src={url} alt="" className="w-full h-full pointer-events-none" />
+                        </button>
                       ))}
                     </div>
                   </div>
