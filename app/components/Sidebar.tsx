@@ -71,7 +71,7 @@ export default function Sidebar() {
       <aside
         className={`fixed top-0 left-0 z-40 w-64 h-screen bg-[#111] transform ${
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        } lg:translate-x-0 transition-transform duration-200 ease-in-out font-manrope flex flex-col`}
+        } lg:translate-x-0 transition-transform duration-200 ease-in-out font-sans flex flex-col`}
       >
         {/* Logo Section */}
         <div className="px-5 py-5 border-b border-white/10">

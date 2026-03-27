@@ -16,7 +16,6 @@ import {
   ChevronLeft,
   ChevronRight,
   MoreVertical,
-  Shield,
   Mail,
   CheckCircle,
   XCircle,
@@ -444,7 +443,7 @@ const AdminManager = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="font-sans antialiased text-gray-900 max-w-7xl mx-auto px-4 py-8 bg-gray-50/90 min-h-full">
       {/* Notification Banner */}
       {notification && (
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg flex items-center ${
@@ -470,13 +469,11 @@ const AdminManager = () => {
       )}
       
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-end md:items-end gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-1 flex items-center">
-              <Shield className="text-[#e6d281] mr-2" size={24} />
-              User Manager
-            </h1>
-            <p className="text-gray-600">Manage user accounts and permissions</p>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
+            <h1 className="serif text-5xl leading-none text-gray-900">User Manager</h1>
+            <p className="text-sm text-gray-600 mt-2">Manage user accounts and permissions</p>
          
           </div>
           <div className="flex gap-3">

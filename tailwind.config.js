@@ -16,7 +16,8 @@ module.exports = {
         fontFamily: {
           'poppins': ['Poppins', 'sans-serif'],
           'montserrat': ['Montserrat', 'sans-serif'],
-          'manrope': ['Manrope', 'sans-serif'],
+          'sans': ['var(--font-geist-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          'serif': ['var(--font-playfair)', 'Georgia', 'serif'],
           'jetbrains': ['JetBrains Mono', 'monospace'],
         },
       },

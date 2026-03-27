@@ -3,26 +3,20 @@ import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import {supabase} from "../../../utils/supabaseClient"
-import {  
-  ArrowLeft, 
-  PlusCircle, 
+import {
+  ArrowLeft,
+  PlusCircle,
   Image as ImageIcon,
-  Tag,
-  Layers,
-  DollarSign,
   Calendar,
   Edit,
-  Trash2,
   ChevronDown,
   X,
-  Check,
   Loader2,
-  User,
   Mail,
   CheckCircle,
   XCircle,
-  Clock
-} from "lucide-react"
+  Clock,
+} from "lucide-react";
 
 interface PresetName {
   en_name: string;
@@ -79,18 +73,6 @@ interface UserInfo {
 }
 
 // Modal interfaces
-interface ApprovalModalData {
-  presetId: string;
-  presetName: string;
-  germanTitle: string;
-}
-
-interface RejectionModalData {
-  presetId: string;
-  presetName: string;
-  rejectionReason: string;
-}
-
 // IndexedDB constants
 const DB_NAME = 'PresetsDB';
 const STORE_NAME = 'presets';
@@ -145,46 +127,51 @@ const getItem = async (key: string): Promise<any> => {
 };
 
 // Safe Image Component with optimized loading
-const SafeImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
-  const [imgSrc, setImgSrc] = useState(src);
-  const [isLoading, setIsLoading] = useState(true);
+const SafeImage = ({ src, alt, className }: { src: string; alt: string; className: string }) => {
   const [hasError, setHasError] = useState(false);
-
-  const handleError = () => {
-    setHasError(true);
-    setIsLoading(false);
-  };
-
-  const handleLoad = () => {
-    setIsLoading(false);
-  };
+  const [loading, setLoading] = useState(true);
 
   if (hasError) {
     return (
-      <div className={`${className} bg-gray-200 flex items-center justify-center`}>
-        <ImageIcon className="text-gray-400" size={24} />
+      <div className={`${className} bg-gray-100 flex items-center justify-center`}>
+        <ImageIcon className="text-gray-400" size={18} />
       </div>
     );
   }
 
   return (
     <div className={`${className} relative overflow-hidden`}>
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-          <Loader2 className="animate-spin text-gray-400" size={20} />
-        </div>
-      )}
+      {loading && <div className="absolute inset-0 bg-gray-100 animate-pulse" />}
       <Image
-        src={imgSrc}
+        src={src}
         alt={alt}
         fill
-        className={`object-cover ${isLoading ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
-        onError={handleError}
-        onLoad={handleLoad}
+        className={`object-cover transition-opacity duration-500 ${loading ? 'opacity-0' : 'opacity-100'}`}
+        onError={() => {
+          setHasError(true);
+          setLoading(false);
+        }}
+        onLoad={() => setLoading(false)}
         loading="lazy"
-        sizes="(max-width: 768px) 100px, (max-width: 1200px) 150px, 200px"
+        sizes="80px"
       />
     </div>
+  );
+};
+
+const StatusBadge = ({ status }: { status: string }) => {
+  const map: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
+    approved: { label: 'Live', icon: <CheckCircle size={9} />, cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+    pending_approval: { label: 'Pending', icon: <Clock size={9} />, cls: 'bg-amber-50 text-amber-900 border-amber-200' },
+    rejected: { label: 'Rejected', icon: <XCircle size={9} />, cls: 'bg-red-50 text-red-800 border-red-200' },
+  };
+  const c = map[status];
+  if (!c) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider border ${c.cls}`}>
+      {c.icon}
+      {c.label}
+    </span>
   );
 };
 
@@ -215,51 +202,49 @@ const ApprovalModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-white/50 bg-opacity-40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-        <div className="p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Approve Preset</h2>
-          <p className="text-gray-600 mb-4">
-            Approve preset: <span className="font-semibold">{presetName}</span>
-          </p>
-          
-          <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-              <label htmlFor="germanTitle" className="block text-sm font-medium text-gray-700 mb-1">
-                German Title *
-              </label>
-              <input
-                type="text"
-                id="germanTitle"
-                value={germanTitle}
-                onChange={(e) => setGermanTitle(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
-                placeholder="Enter German title"
-                required
-              />
-            </div>
+    <div className="fixed inset-0 bg-black/40 blur-back z-50 flex items-center justify-center p-4">
+      <div className="fu bg-white border border-gray-200 shadow-xl rounded-2xl w-full max-w-md p-6">
+        <h2 className="text-base font-medium text-gray-900 mb-1">Approve preset</h2>
+        <p className="text-xs text-gray-600 mb-5">
+          <span className="text-amber-800">{presetName}</span>
+        </p>
 
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setGermanTitle('');
-                  onClose();
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 flex items-center"
-              >
-                <CheckCircle className="mr-2" size={16} />
-                Approve Preset
-              </button>
-            </div>
-          </form>
-        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-5">
+            <label htmlFor="germanTitle" className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">
+              German title *
+            </label>
+            <input
+              type="text"
+              id="germanTitle"
+              value={germanTitle}
+              onChange={(e) => setGermanTitle(e.target.value)}
+              className="ifield text-sm"
+              placeholder="Enter German title"
+              required
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setGermanTitle('');
+                onClose();
+              }}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 flex items-center justify-center gap-2"
+            >
+              <CheckCircle size={16} />
+              Approve
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -291,51 +276,49 @@ const RejectionModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-white/50 bg-opacity-80 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-        <div className="p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Reject Preset</h2>
-          <p className="text-gray-600 mb-4">
-            Reject preset: <span className="font-semibold">{presetName}</span>
-          </p>
-          
-          <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-              <label htmlFor="rejectionReason" className="block text-sm font-medium text-gray-700 mb-1">
-                Reason for Rejection *
-              </label>
-              <textarea
-                id="rejectionReason"
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]"
-                placeholder="Please provide reason for rejection..."
-                required
-              />
-            </div>
+    <div className="fixed inset-0 bg-black/40 blur-back z-50 flex items-center justify-center p-4">
+      <div className="fu bg-white border border-gray-200 shadow-xl rounded-2xl w-full max-w-md p-6">
+        <h2 className="text-base font-medium text-gray-900 mb-1">Reject preset</h2>
+        <p className="text-xs text-gray-600 mb-5">
+          <span className="text-amber-800">{presetName}</span>
+        </p>
 
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setRejectionReason('');
-                  onClose();
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 flex items-center"
-              >
-                <XCircle className="mr-2" size={16} />
-                Reject Preset
-              </button>
-            </div>
-          </form>
-        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-5">
+            <label htmlFor="rejectionReason" className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">
+              Reason *
+            </label>
+            <textarea
+              id="rejectionReason"
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              rows={4}
+              className="ifield text-sm min-h-[100px] resize-y"
+              placeholder="Reason for rejection…"
+              required
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setRejectionReason('');
+                onClose();
+              }}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 flex items-center justify-center gap-2"
+            >
+              <XCircle size={16} />
+              Reject
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -351,7 +334,6 @@ const Page = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [dataSource, setDataSource] = useState<string>('');
   const [userInfo, setUserInfo] = useState<{ [key: string]: UserInfo }>({});
   
   // Modal states
@@ -365,9 +347,6 @@ const Page = () => {
     presetId: '',
     presetName: ''
   });
-
-  // ONLY show pending_approval presets by default
-  const [statusFilter, setStatusFilter] = useState<'pending_approval'>('pending_approval');
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -497,8 +476,7 @@ const Page = () => {
     const fetchAllPresets = async () => {
       try {
         let allPresets: any[] = [];
-        setDataSource('Supabase');
-        
+
         const { data, error } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
         if (error) {
           console.error("Error fetching presets:", error);
@@ -538,9 +516,7 @@ const Page = () => {
           schema: 'public', 
           table: 'presets' 
         },
-        async (payload) => {
-          setDataSource('Supabase Realtime');
-
+        async () => {
           const { data, error } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
           
           if (error) {
@@ -786,20 +762,6 @@ const Page = () => {
       presetId,
       presetName
     });
-  };
-
-  // Get status badge
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending_approval':
-        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full flex items-center w-fit"><Clock className="mr-1" size={12} />Pending</span>;
-      case 'approved':
-        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center w-fit"><CheckCircle className="mr-1" size={12} />Approved</span>;
-      case 'rejected':
-        return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full flex items-center w-fit"><XCircle className="mr-1" size={12} />Rejected</span>;
-      default:
-        return <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Draft</span>;
-    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -1140,339 +1102,231 @@ const Page = () => {
   };
 
   if (currentView === 'create') {
+    const active = formData.images.filter((i) => !i.markedForDeletion);
+    const req = formData.size.value ? Math.ceil(parseInt(String(formData.size.value)) / 2) : 0;
+    const resetCreate = () => {
+      setCurrentView('list');
+      setEditingId(null);
+      setFormData({
+        titleEn: '',
+        titleDe: '',
+        descEn: '',
+        size: { value: '', price: 0 },
+        price: '',
+        images: [],
+      });
+    };
+
     return (
-      <div className="container mx-auto px-4 py-8 font-manrope">
-        <div 
-          onClick={() => {
-            setCurrentView('list');
-            setEditingId(null);
-            setFormData({
-              titleEn: '', 
-              titleDe: '', 
-              descEn: '', 
-              size: { value: '', price: 0 }, 
-              price: '', 
-              images: [] 
-            });
-          }} 
-          className="mb-4 cursor-pointer flex items-center text-[#e6d281] hover:text-[#d4c070] transition-colors"
-        >
-          <ArrowLeft className="mr-2" />
-          <span>Back to Presets</span>
-        </div>
+      <div className="pp">
+        <div className="max-w-xl mx-auto px-6 py-12">
+          <button type="button" onClick={resetCreate} className="flex items-center gap-2 text-gray-600 hover:text-[#e6d281] transition-colors mb-10 text-sm">
+            <ArrowLeft size={15} /> Back
+          </button>
+          <h1 className="serif text-4xl text-gray-900 mb-1">{editingId ? 'Edit preset' : 'New preset'}</h1>
+          <p className="text-sm text-gray-600 mb-10">English and German titles, size, images, then save.</p>
 
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex items-center mb-4">
-            {editingId ? (
-              <Edit className="text-[#e6d281] mr-2" size={24} />
-            ) : (
-              <PlusCircle className="text-[#e6d281] mr-2" size={24} />
-            )}
-            <h1 className="text-2xl font-bold text-gray-800">
-              {editingId ? 'Edit Preset' : 'Create New Preset'}
-            </h1>
-          </div>
-          <p className="text-gray-600">
-            {editingId 
-              ? 'Update the preset information below.' 
-              : 'Fill out the form below to create a new egg card preset.'
-            }
-          </p>
-        </div>
-
-        <form className="space-y-6" onSubmit={handleSubmit}>
-          {/* Titles Section */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-              <Tag className="text-[#e6d281] mr-2" size={20} />
-              Preset Titles
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="title-en" className="block text-sm font-medium text-gray-700 mb-1">Title (English) *</label>
-                <input 
-                  required 
-                  onChange={handleInputChange} 
-                  type="text" 
-                  id="title-en" 
-                  name="titleEn" 
-                  value={formData.titleEn}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
-                  placeholder="Spring Flowers Collection" 
-                />
-              </div>
-              <div>
-                <label htmlFor="title-de" className="block text-sm font-medium text-gray-700 mb-1">Title (German) *</label>
-                <input 
-                  required 
-                  onChange={handleInputChange} 
-                  type="text" 
-                  id="title-de" 
-                  name="titleDe" 
-                  value={formData.titleDe}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
-                  placeholder="Frühlingsblumen Kollektion" 
-                />
-              </div>
-            </div>
-          </div>
-      
-          {/* Description Section - Only English */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-              <Edit className="text-[#e6d281] mr-2" size={20} />
-              Description (Optional)
-            </h2>
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="desc-en" className="block text-sm font-medium text-gray-700 mb-1">Description (English)</label>
-              <textarea 
-                onChange={handleInputChange} 
-                id="desc-en" 
-                name="descEn" 
-                rows={3} 
-                value={formData.descEn}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281]" 
-                placeholder="A beautiful collection of spring flower designs for your egg memory game."
-              ></textarea>
+              <label htmlFor="title-en" className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">
+                Title (English) *
+              </label>
+              <input
+                required
+                id="title-en"
+                name="titleEn"
+                value={formData.titleEn}
+                onChange={handleInputChange}
+                className="ifield"
+                placeholder="Spring Flowers"
+              />
             </div>
-          </div>
-    
+            <div>
+              <label htmlFor="title-de" className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">
+                Title (German) *
+              </label>
+              <input
+                required
+                id="title-de"
+                name="titleDe"
+                value={formData.titleDe}
+                onChange={handleInputChange}
+                className="ifield"
+                placeholder="Frühlingsblumen"
+              />
+            </div>
+            <div>
+              <label htmlFor="desc-en" className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">
+                Description (optional)
+              </label>
+              <textarea
+                id="desc-en"
+                name="descEn"
+                rows={3}
+                value={formData.descEn}
+                onChange={handleInputChange}
+                className="ifield min-h-[88px] resize-y"
+                placeholder="Short description…"
+              />
+            </div>
 
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-              <DollarSign className="text-[#e6d281] mr-2" size={20} />
-              Size & Pricing
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="size" className="block text-sm font-medium text-gray-700 mb-1">Preset Size</label>
-                <div className="relative">
-                <select
-                name="size"
-                value={formData.size?.value || ""}
-                onChange={(e) => {
-                  const selectedValue = e.target.value;
-                  const selectedSize = sizes.find(
-                    (s) => s.value.toString() === selectedValue
-                  );
-                  if (selectedSize) {
-                    setFormData((prev) => ({
-                      ...prev,
-                      size: selectedSize,
-                      price: selectedSize.price.toFixed(2),
-                    }));
-                  }
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] appearance-none"
-              >
-                <option value="">Select a size</option>
-                {sizes.map(({ value, price }) => (
-                  <option key={value} value={value}>
-                    {value} cards - €{price.toFixed(2)}
-                  </option>
-                ))}
-              </select>
-
-                  <ChevronDown className="absolute right-3 top-3 text-gray-400" size={16} />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-                  Price (€) - Auto-calculated
+                <label htmlFor="size" className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">
+                  Size
                 </label>
                 <div className="relative">
-                  <input 
-                    required 
-                    readOnly
-                    type="number" 
-                    id="price" 
-                    name="price" 
-                    value={formData.price}
-                    step="0.01" 
-                    min="0" 
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700 cursor-not-allowed focus:outline-none focus:ring-[#e6d281] focus:border-[#e6d281] pl-8" 
-                    placeholder="Select size to see price" 
-                  />
-                  <DollarSign className="absolute left-3 top-3 text-gray-400" size={16} />
+                  <select
+                    id="size"
+                    name="size"
+                    value={formData.size?.value || ''}
+                    onChange={(e) => {
+                      const selectedValue = e.target.value;
+                      const selectedSize = sizes.find((s) => s.value.toString() === selectedValue);
+                      if (selectedSize) {
+                        setFormData((prev) => ({
+                          ...prev,
+                          size: selectedSize,
+                          price: selectedSize.price.toFixed(2),
+                        }));
+                      }
+                    }}
+                    className="ifield appearance-none pr-10"
+                  >
+                    <option value="">Select</option>
+                    {sizes.map(({ value, price }) => (
+                      <option key={value} value={value}>
+                        {value} cards — €{price.toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Price is automatically calculated based on the selected size
-                </p>
               </div>
-            </div>
-          </div>
-      
-          {/* Images Upload Section */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-              <ImageIcon className="text-[#e6d281] mr-2" size={20} />
-              Upload Images
-            </h2>
-            
-            <div 
-              className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-[#e6d281] transition-colors cursor-pointer"
-              onClick={() => {
-                if(!formData.size.value){
-                  alert("Please select a size first"); 
-                  return;
-                }
-              }}
-            >
-              <div className="space-y-1 text-center">
-                <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="flex text-sm text-gray-600 justify-center">
-                  <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-[#e6d281] hover:text-[#d4c070] focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-[#e6d281]">
-                    <span>Upload files</span>
-                    <input 
-                      id="file-upload" 
-                      name="images" 
-                      type="file" 
-                      className="sr-only" 
-                      multiple 
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files.length > 0) {
-                          const filesArray = Array.from(e.target.files).map(file => ({
-                            fileObject: file,
-                            previewUrl: URL.createObjectURL(file),
-                            isExisting: false
-                          }));
-                          setFormData(prev => ({
-                            ...prev,
-                            images: [...prev.images, ...filesArray]
-                          }));
-                        }
-                      }}
-                    />
-                  </label>
-                  <p className="pl-1">or drag and drop</p>
-                </div>
-                <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
-                {formData.size.value && (
-                  <p className="text-xs text-[#e6d281] mt-2">
-                    Selected size requires {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images (will be duplicated to create {formData.size.value} cards)
-                  </p>
-                )}
-                {editingId && (
-                  <p className="text-xs text-blue-600 mt-2">
-                    💡 You can add new images or remove existing ones
-                  </p>
-                )}
+              <div>
+                <label htmlFor="price" className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">
+                  Price (€)
+                </label>
+                <input
+                  readOnly
+                  required
+                  id="price"
+                  name="price"
+                  type="text"
+                  value={formData.price}
+                  className="ifield opacity-80 cursor-not-allowed"
+                  placeholder="—"
+                />
               </div>
             </div>
 
-            {formData.images.length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
-                  <ImageIcon className="mr-2" size={16} />
-                  Selected Images ({formData.images.filter(img => !img.markedForDeletion).length}/{Math.ceil(parseInt(String(formData.size.value || '0')) / 2)} unique)
-                  {editingId && (
-                    <span className="ml-2 text-xs text-blue-600">
-                      (Existing: {formData.images.filter(img => img.isExisting && !img.markedForDeletion).length}, 
-                      New: {formData.images.filter(img => !img.isExisting).length},
-                      To be deleted: {formData.images.filter(img => img.markedForDeletion).length})
-                    </span>
-                  )}
-                </h3>
-                
-                {formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2) && (
-                  <p className="text-sm text-red-500 mt-2 mb-3">
-                    ⚠️ Warning: You need exactly {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images for this preset size (which will be duplicated to create {formData.size.value} cards). 
-                    Currently you have {formData.images.filter(img => !img.markedForDeletion).length} active images.
-                  </p>
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">
+                Images
+                {req > 0 && (
+                  <span className={`ml-2 normal-case ${active.length === req ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    {active.length}/{req}
+                  </span>
                 )}
-                
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              </label>
+              <label
+                htmlFor="file-upload"
+                className={`flex flex-col items-center justify-center h-28 border-dashed border-2 rounded-xl cursor-pointer transition-all ${
+                  !formData.size.value ? 'border-gray-200 opacity-30 cursor-not-allowed' : 'border-gray-200 hover:border-[#e6d281]/40'
+                }`}
+              >
+                <ImageIcon size={20} className="text-gray-500 mb-1.5" />
+                <span className="text-xs text-gray-600">Upload images</span>
+                <input
+                  id="file-upload"
+                  name="images"
+                  type="file"
+                  className="sr-only"
+                  multiple
+                  disabled={!formData.size.value}
+                  onChange={(e) => {
+                    if (e.target.files?.length) {
+                      const filesArray = Array.from(e.target.files).map((file) => ({
+                        fileObject: file,
+                        previewUrl: URL.createObjectURL(file),
+                        isExisting: false,
+                      }));
+                      setFormData((prev) => ({ ...prev, images: [...prev.images, ...filesArray] }));
+                    }
+                  }}
+                />
+              </label>
+              {formData.images.length > 0 && (
+                <div className="mt-3 grid grid-cols-6 gap-2">
                   {formData.images.map((image, index) => (
-                    <div key={index} className="relative group">
-                      <div className={`aspect-square overflow-hidden rounded-md border ${image.markedForDeletion ? 'border-red-500 opacity-50' : 'border-gray-200'}`}>
-                        <img 
-                          src={image.previewUrl} 
-                          alt={`Preview ${index}`} 
-                          className="w-full h-full object-cover"
-                        />
-                        {image.isExisting && !image.markedForDeletion && (
-                          <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
-                            Existing
-                          </div>
-                        )}
-                        {image.markedForDeletion && (
-                          <div className="absolute top-2 left-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                            To Delete
-                          </div>
-                        )}
-                      </div>
+                    <div key={index} className={`relative group aspect-square rounded-lg overflow-hidden ${image.markedForDeletion ? 'opacity-30' : ''}`}>
+                      <img src={image.previewUrl} alt="" className="w-full h-full object-cover" />
+                      {image.isExisting && !image.markedForDeletion && (
+                        <span className="absolute top-1 left-1 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/90 text-white">Saved</span>
+                      )}
+                      {image.markedForDeletion && (
+                        <span className="absolute top-1 left-1 text-[9px] px-1.5 py-0.5 rounded bg-red-500/90 text-white">Remove</span>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleImageRemove(index)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+                        className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        <X size={12} />
+                        <X size={14} />
                       </button>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-      
-          {/* Form Actions */}
-          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
-            <button 
-              type="button"
-              onClick={() => {
-                setCurrentView('list');
-                setEditingId(null);
-                setFormData({
-                  titleEn: '', 
-                  titleDe: '', 
-                  descEn: '', 
-                  size: { value: '', price: 0 }, 
-                  price: '', 
-                  images: [] 
-                });
-              }}
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 flex items-center justify-center"
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit"
-              disabled={isLoading || (!!formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2))}
-              className="px-4 py-2 border border-transparent rounded-md text-sm font-medium bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 cursor-pointer transition-colors flex items-center justify-center disabled:opacity-50"
-            >
-              {isLoading ? (
-                <Loader2 className="mr-2 animate-spin" size={16} />
-              ) : (
-                <PlusCircle className="mr-2" size={16} />
               )}
-              {isLoading ? (editingId ? 'Updating...' : 'Creating...') : (editingId ? 'Update Preset' : 'Create Preset')}
-            </button>
-          </div>
-          
-          {/* Show message when button is disabled due to image count */}
-          {formData.size.value && formData.images.filter(img => !img.markedForDeletion).length !== Math.ceil(parseInt(String(formData.size.value)) / 2) && !isLoading && (
-            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-              <p className="text-sm text-yellow-800">
-                <span className="font-medium">⚠️ Cannot submit:</span> You need exactly {Math.ceil(parseInt(String(formData.size.value)) / 2)} unique images for this preset size. 
-                Currently you have {formData.images.filter(img => !img.markedForDeletion).length} active images.
-              </p>
+              {formData.size.value && active.length !== req && req > 0 && (
+                <p className="text-xs text-amber-800 mt-2">
+                  Need exactly {req} unique images for this deck size.
+                </p>
+              )}
             </div>
-          )}
-        </form>
+
+            <div className="flex gap-3 pt-4">
+              <button type="button" onClick={resetCreate} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 hover:border-gray-300 transition-all text-sm">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={
+                  isLoading ||
+                  (!!formData.size.value && active.length !== Math.ceil(parseInt(String(formData.size.value)) / 2))
+                }
+                className="flex-1 py-3 rounded-xl bg-[#e6d281] text-[#0a0a0a] font-semibold text-sm hover:bg-[#f0dc8a] transition-all disabled:opacity-30 flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    {editingId ? 'Saving…' : 'Creating…'}
+                  </>
+                ) : (
+                  <>
+                    <PlusCircle size={14} />
+                    {editingId ? 'Update' : 'Create'}
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     );
   }
 
+  const pendingCount = preset.filter((p) => p.preset_status === 'pending_approval').length;
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Modals */}
+    <div className="pp">
       <ApprovalModal
         isOpen={approvalModal.isOpen}
         onClose={() => setApprovalModal({ isOpen: false, presetId: '', presetName: '' })}
         onApprove={handleApprovePreset}
         presetName={approvalModal.presetName}
       />
-      
+
       <RejectionModal
         isOpen={rejectionModal.isOpen}
         onClose={() => setRejectionModal({ isOpen: false, presetId: '', presetName: '' })}
@@ -1480,249 +1334,143 @@ const Page = () => {
         presetName={rejectionModal.presetName}
       />
 
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-          <div className='mb-4 md:mb-0'>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">Presets Management</h1>
-            <p className="text-gray-600">Manage all presets (collections of egg cards). Review, approve, and organize presets.</p>
-            
-            {/* Search Status */}
-            {searchQuery && (
-              <div className="mt-2">
-                <p className="text-sm text-gray-600">
-                  Showing results for: <span className="font-semibold text-[#e6d281]">"{searchQuery}"</span>
-                  <span className="ml-2 text-xs bg-[#e6d281] bg-opacity-20 px-2 py-1 rounded-full">
-                    {filteredPreset.length} preset(s) found
-                  </span>
-                </p>
-              </div>
-            )}
+      <div className="max-w-5xl mx-auto px-6 py-10">
+        <div className="flex items-end justify-between mb-10 flex-wrap gap-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
+            <h1 className="serif text-5xl leading-none text-gray-900">Preset requests</h1>
+            <p className="text-sm text-gray-600 mt-3 max-w-lg">Pending submissions. Approve with a German title or reject with a reason.</p>
           </div>
-    
           <button
+            type="button"
             onClick={() => setCurrentView('create')}
-            className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 shadow-sm flex items-center"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e6d281] text-[#0a0a0a] font-medium text-sm hover:bg-[#f0dc8a] transition-all"
           >
-            <PlusCircle className="mr-2" size={16} />
-            Create New Preset
+            <PlusCircle size={14} /> New preset
           </button>
         </div>
 
-        {/* Status Filter - ONLY pending approval shown */}
-        <div className="mt-4">
-          <div className="inline-flex items-center bg-yellow-100 text-yellow-800 px-4 py-2 rounded-lg">
-            <Clock className="mr-2" size={16} />
-            <span className="font-medium">Showing: Pending Approval Presets Only</span>
+        <div className="flex gap-8 mb-8 pb-8 border-b border-gray-200 flex-wrap items-end">
+          <div>
+            <p className="text-3xl font-light">{pendingCount}</p>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mt-0.5">Pending</p>
           </div>
+          <div>
+            <p className="text-3xl font-light">{filteredPreset.length}</p>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mt-0.5">Shown</p>
+          </div>
+          {searchQuery && (
+            <div className="ml-auto">
+              <p className="text-sm text-gray-600">
+                {filteredPreset.length} result{filteredPreset.length !== 1 ? 's' : ''} for{' '}
+                <span className="text-[#e6d281]">&quot;{searchQuery}&quot;</span>
+              </p>
+            </div>
+          )}
         </div>
-      </div>
-  
-      {filteredPreset.length > 0 ? (
-        <div className="grid grid-cols-1 gap-6">
-          {filteredPreset.map((item) => (
-            <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
-              <div className="p-6">
-                <div className="flex flex-col lg:flex-row gap-6">
-                  <div className="w-full">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-                      <div className="mb-4 md:mb-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          {getStatusBadge(item.preset_status || 'draft')}
-                        </div>
-                        <div className="mb-3">
-                          <p className="text-xs text-gray-500 mb-1 flex items-center">
-                            <Tag className="mr-1" size={14} />
-                            English Title
-                          </p>
-                          <h2 className="text-lg font-semibold text-gray-800">
-                            {item.preset_name?.en_name || 'Untitled Preset'}
-                          </h2>
-                        </div>
-                        <div className="mb-4 md:mb-0">
-                          <p className="text-xs text-gray-500 mb-1 flex items-center">
-                            <Tag className="mr-1" size={14} />
-                            German Title
-                          </p>
-                          <h2 className="text-lg font-semibold text-gray-800">
-                            {item.preset_name?.de_name || 'Unbenanntes Preset'}
-                          </h2>
-                        </div>
-                      </div>
-      
-                      <div className="flex flex-col items-start md:items-end gap-3 w-full md:w-auto">
-                        {/* Action Buttons - Only show for pending_approval */}
-                        {item.preset_status === 'pending_approval' && (
-                          <div className="flex gap-2">
-                            <button 
-                              onClick={() => openApprovalModal(item.id, item.preset_name?.en_name || 'Untitled Preset')} 
-                              disabled={isLoading}
-                              className="px-3 py-1.5 bg-green-50 text-green-600 hover:bg-green-100 rounded-md text-sm font-medium flex items-center"
-                            >
-                              <CheckCircle className="mr-1" size={14} />
-                              {isLoading ? 'Approving...' : 'Approve'}
-                            </button>
-                            <button 
-                              onClick={() => openRejectionModal(item.id, item.preset_name?.en_name || 'Untitled Preset')} 
-                              disabled={isLoading}
-                              className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-sm font-medium flex items-center"
-                            >
-                              <XCircle className="mr-1" size={14} />
-                              {isLoading ? 'Rejecting...' : 'Reject'}
-                            </button>
-                          </div>
-                        )}
-                        
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => handleEdit(item.id)} 
-                            className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md text-sm font-medium flex items-center"
-                          >
-                            <Edit className="mr-1" size={14} />
-                            Edit
-                          </button>
-                    
-                        </div>
 
-                        <div className="bg-gray-100 px-3 py-2 rounded-lg text-center">
-                          <p className="text-xs text-gray-500 flex items-center justify-center">
-                            <Layers className="mr-1" size={12} />
-                            {item.preset_size_json?.value || 'N/A'} cards
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Creator Information */}
-                    {item.created_by && (
-                      <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                        <p className="text-xs text-blue-600 mb-2 font-medium">Creator Information</p>
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center">
-                            <Mail className="text-blue-500 mr-1" size={14} />
-                            <span className="text-sm text-gray-700">
-                              {userInfo[item.created_by]?.email || 'Loading email...'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-    
-                    <div className="my-4">
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1 flex items-center">
-                          <Edit className="mr-1" size={14} />
-                          English Description
-                        </p>
-                        <p className="text-gray-700 text-sm">
-                          {item.preset_desc?.en_desc || 'No description'}
-                        </p>
-                      </div>
-                    </div>
-    
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                      <div className="bg-gray-100 px-3 py-2 rounded-lg">
-                        <p className="text-xs text-gray-500 flex items-center">
-                          <DollarSign className="mr-1" size={12} />
-                          Price
-                        </p>
-                        <p className="text-lg font-bold">€{item.preset_price || '0.00'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 flex items-center">
-                          <Calendar className="mr-1" size={12} />
-                          Created
-                        </p>
-                        <p className="text-sm font-medium">
-                          {new Date(item.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      {item.approved_at && (
-                        <div>
-                          <p className="text-xs text-gray-500 flex items-center">
-                            <CheckCircle className="mr-1" size={12} />
-                            Approved
-                          </p>
-                          <p className="text-sm font-medium">
-                            {new Date(item.approved_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Admin Notes */}
-                    {item.admin_notes && (
-                      <div className="mt-4 p-3 bg-yellow-50 rounded-lg">
-                        <p className="text-xs text-yellow-700 mb-1 font-medium">Admin Notes</p>
-                        <p className="text-sm text-yellow-800">{item.admin_notes}</p>
-                      </div>
-                    )}
-
-                    {/* Rejection Reason */}
-                    {item.rejection_reason && (
-                      <div className="mt-4 p-3 bg-red-50 rounded-lg">
-                        <p className="text-xs text-red-700 mb-1 font-medium">Rejection Reason</p>
-                        <p className="text-sm text-red-800">{item.rejection_reason}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-    
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <p className="text-xs text-gray-500 mb-3 flex items-center">
-                    <ImageIcon className="mr-1" size={14} />
-                    Preset Images ({item.preset_images?.length || 0})
-                  </p>
-                  <div className="flex gap-3 overflow-x-auto pb-2">
-                    {item.preset_images?.map((imageUrl: string, index: number) => (
-                      <div key={index} className="flex-shrink-0 h-[100px] w-[100px] overflow-hidden rounded-md border border-gray-200">
-                        <SafeImage
-                          src={imageUrl}
-                          alt={`Preset image ${index + 1}`}
-                          className="w-full h-full"
-                        />
+        {filteredPreset.length > 0 ? (
+          <div className="space-y-2">
+            {filteredPreset.map((item, idx) => (
+              <div key={item.id} className="card fu p-4 flex flex-col gap-4" style={{ animationDelay: `${idx * 30}ms` }}>
+                <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                  <div className="flex gap-1.5 shrink-0 overflow-x-auto pb-1 sm:pb-0">
+                    {(item.preset_images || []).slice(0, 12).map((url, i) => (
+                      <div key={i} className="w-11 h-11 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+                        <SafeImage src={url} alt="" className="w-full h-full" />
                       </div>
                     ))}
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <h2 className="text-sm font-medium truncate">{item.preset_name?.en_name || 'Untitled'}</h2>
+                      <StatusBadge status={item.preset_status || ''} />
+                    </div>
+                    <p className="text-xs text-gray-600 truncate mb-2">{item.preset_name?.de_name || '—'}</p>
+                    <p className="text-xs text-gray-600 line-clamp-2 mb-2">{item.preset_desc?.en_desc || 'No description'}</p>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <Calendar size={10} />
+                        {new Date(item.created_at).toLocaleDateString()}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Mail size={10} />
+                        {item.created_by ? userInfo[item.created_by]?.email || '…' : '—'}
+                      </span>
+                      <span className="text-[#e6d281]">€{item.preset_price || '0.00'}</span>
+                      <span>
+                        {item.preset_size_json?.value || '—'} cards
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    {item.preset_status === 'pending_approval' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => openApprovalModal(item.id, item.preset_name?.en_name || 'Untitled')}
+                          disabled={isLoading}
+                          className="px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-800 text-xs font-medium hover:bg-emerald-50 disabled:opacity-40 flex items-center gap-1"
+                        >
+                          <CheckCircle size={14} />
+                          {isLoading ? '…' : 'Approve'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openRejectionModal(item.id, item.preset_name?.en_name || 'Untitled')}
+                          disabled={isLoading}
+                          className="px-3 py-1.5 rounded-lg border border-red-200 text-red-800 text-xs font-medium hover:bg-red-50 disabled:opacity-40 flex items-center gap-1"
+                        >
+                          <XCircle size={14} />
+                          {isLoading ? '…' : 'Reject'}
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(item.id)}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs hover:text-amber-900 hover:border-[#e6d281]/30 flex items-center gap-1"
+                    >
+                      <Edit size={14} />
+                      Edit
+                    </button>
+                  </div>
                 </div>
+
+                {item.admin_notes && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                    <span className="text-[10px] uppercase tracking-wider text-amber-800">Note</span> {item.admin_notes}
+                  </div>
+                )}
+                {item.rejection_reason && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
+                    <span className="text-[10px] uppercase tracking-wider text-red-700">Rejected</span> {item.rejection_reason}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow-md p-8 text-center">
-          <div className="mx-auto max-w-md">
-            <div className="mx-auto h-12 w-12 text-gray-400 mb-4">
-              <ImageIcon size={48} />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900">
-              {searchQuery ? 'No matching presets found!' : 'No pending approval presets found!'}
-            </h3>
-            <p className="mt-1 text-gray-500 mb-6">
-              {searchQuery 
-                ? `No pending approval presets found matching "${searchQuery}". Try a different search term.`
-                : 'There are currently no presets waiting for approval.'
-              }
-            </p>
-            {isLoading ? (
-              <button
-                onClick={() => setCurrentView('create')}
-                className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
-              >
-                <Loader2 className="mr-2" size={16} />
-                Creating Preset...
-              </button>
-            ):(
-              <button
-                onClick={() => setCurrentView('create')}
-                className="bg-[#e6d281] hover:bg-[#d4c070] text-gray-800 font-medium py-2 px-4 rounded-lg transition duration-200 flex items-center mx-auto"
-              >
-                <PlusCircle className="mr-2" size={16} />
-                Create Preset
-              </button>
-            )}
+            ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-5 border border-gray-200">
+              <ImageIcon size={22} className="text-gray-400" />
+            </div>
+            <h3 className="text-base mb-1">{searchQuery ? 'No results' : 'No pending requests'}</h3>
+            <p className="text-xs text-gray-500 mb-7 max-w-sm">
+              {searchQuery
+                ? `Nothing matches “${searchQuery}”.`
+                : 'Submissions will appear here when creators send presets for review.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setCurrentView('create')}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e6d281] text-[#0a0a0a] font-medium text-sm hover:bg-[#f0dc8a] transition-all"
+            >
+              <PlusCircle size={14} /> New preset
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

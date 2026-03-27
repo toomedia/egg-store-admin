@@ -224,13 +224,11 @@ const UsersPage = () => {
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex justify-between items-start">
+        <div className="flex justify-between items-end">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-800 flex items-center">
-              <User className="text-[#e6d281] mr-2" size={24} />
-              Customer Management
-            </h1>
-            <p className="text-gray-500 mt-1">
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
+            <h1 className="serif text-5xl leading-none text-gray-900">Customers</h1>
+            <p className="text-sm text-gray-600 mt-2">
               Manage all your customers in one place
             </p>
             

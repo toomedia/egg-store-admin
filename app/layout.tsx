@@ -1,11 +1,14 @@
 import "./globals.css";
+import type { ReactNode } from "react";
+import { GeistSans } from "geist/font/sans";
+import { Playfair_Display } from "next/font/google";
 import ClientWrapper from "./ClientWrapper";
-import { Manrope } from "next/font/google";
 
-const manrope = Manrope({
+const playfair = Playfair_Display({
   subsets: ["latin"],
+  weight: ["400", "500"],
   display: "swap",
-  variable: "--font-manrope",
+  variable: "--font-playfair",
 });
 
 export const metadata = {
@@ -16,11 +19,11 @@ export const metadata = {
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <html lang="en" className={manrope.variable}>
-      <body className="antialiased">
+    <html lang="en" className={`${GeistSans.variable} ${playfair.variable}`}>
+      <body className={`${GeistSans.className} antialiased`}>
         <ClientWrapper>
           {children}
         </ClientWrapper>

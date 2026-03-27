@@ -381,11 +381,13 @@ const processUserGrowthData = (usersData: any[]) => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6 font-manrope">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6 font-sans">
+      <div className="max-w-6xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-base text-gray-500">Overview of your egg card store</p>
+          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
+          <h1 className="serif text-5xl leading-none text-gray-900">Overview</h1>
+          <p className="text-sm text-gray-600 mt-2">Your egg card store at a glance</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button 
@@ -456,8 +458,8 @@ const processUserGrowthData = (usersData: any[]) => {
           className="flex justify-between items-center p-5 cursor-pointer"
           onClick={() => toggleSection('performance')}
         >
-          <h2 className="font-semibold text-xl flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-[#e6d281]" />
+          <h2 className="serif text-2xl leading-tight text-gray-900 flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-[#e6d281] shrink-0" />
             Performance Metrics
           </h2>
           {expandedSections.performance ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -498,8 +500,8 @@ const processUserGrowthData = (usersData: any[]) => {
           className="flex justify-between items-center p-5 cursor-pointer"
           onClick={() => toggleSection('charts')}
         >
-          <h2 className="font-semibold text-xl flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-[#e6d281]" />
+          <h2 className="serif text-2xl leading-tight text-gray-900 flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-[#e6d281] shrink-0" />
             Analytics Overview
           </h2>
           {expandedSections.charts ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -508,8 +510,8 @@ const processUserGrowthData = (usersData: any[]) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-5 pt-0">
             {/* Orders Line Chart */}
             <div className="bg-gray-50 p-5 rounded-lg">
-              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-                <ShoppingCart className="w-4 h-4 text-[#e6d281]" />
+              <h3 className="serif text-lg text-gray-900 mb-4 flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4 text-[#e6d281] shrink-0" />
                 Monthly Orders Trend
               </h3>
               <div className="h-64">
@@ -554,8 +556,8 @@ const processUserGrowthData = (usersData: any[]) => {
 
             {/* Total Users Growth */}
             <div className="bg-gray-50 p-5 rounded-lg">
-              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-                <Users className="w-4 h-4 text-[#e6d281]" />
+              <h3 className="serif text-lg text-gray-900 mb-4 flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#e6d281] shrink-0" />
                 Total Users Growth
               </h3>
               <div className="h-64">
@@ -589,6 +591,7 @@ const processUserGrowthData = (usersData: any[]) => {
         )}
       </div>
 
+      </div>
     </div>
   );
 };
@@ -599,8 +602,8 @@ export default Dashboard;
 const StatCard = ({ title, value, icon, color }: any) => (
   <div className="bg-white p-5 rounded-xl shadow flex justify-between items-center transition-transform hover:scale-[1.02]">
     <div>
-      <p className="text-base text-gray-500">{title}</p>
-      <h3 className="text-2xl font-bold text-gray-900">{value}</h3>
+      <p className="text-[10px] uppercase tracking-widest text-gray-500">{title}</p>
+      <p className="text-3xl font-light text-gray-900 mt-1">{value}</p>
     </div>
     <div className={`w-12 h-12 ${color} rounded-full flex items-center justify-center text-white`}>
       {icon}
@@ -610,8 +613,8 @@ const StatCard = ({ title, value, icon, color }: any) => (
 
 const MetricCard = ({ title, value, description, trend, trendValue, icon }: any) => (
   <div className="bg-gray-50 p-5 rounded-lg border border-gray-100">
-    <p className="text-base text-gray-500">{title}</p>
-    <h3 className="text-2xl font-bold text-gray-900 mt-1">{value}</h3>
+    <p className="text-[10px] uppercase tracking-widest text-gray-500">{title}</p>
+    <p className="text-3xl font-light text-gray-900 mt-1">{value}</p>
     <div className="flex items-center mt-2">
       <div className={`flex items-center ${trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
         {icon}

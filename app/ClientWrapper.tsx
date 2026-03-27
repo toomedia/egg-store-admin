@@ -32,7 +32,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-manrope">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans">
         <div className="text-center">
           <div className="relative w-14 h-14 mx-auto mb-4">
             <div className="absolute inset-0 rounded-full border-4 border-[#e6d281]/30" />
@@ -58,7 +58,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 lg:ml-64">
+      <main className="flex-1 min-h-screen bg-gray-50 lg:ml-64">
         <Topbar />
         {children}
       </main>

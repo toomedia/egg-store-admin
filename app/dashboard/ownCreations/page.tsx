@@ -1148,7 +1148,7 @@ const OwnCreations = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="font-sans antialiased text-gray-900 max-w-7xl mx-auto px-4 py-8 bg-gray-50/90 min-h-full">
       {notification && (
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg flex items-center ${
           notification.type === 'success' ? 'bg-green-100 text-green-800' :
@@ -1405,13 +1405,11 @@ const OwnCreations = () => {
       )}
       
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-end md:items-end gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-1 flex items-center">
-              <ImageIcon className="text-[#e6d281] mr-2" size={24} />
-              My Creations
-            </h1>
-            <p className="text-gray-600">Browse and manage your creative works from user generated images</p>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
+            <h1 className="serif text-5xl leading-none text-gray-900">My Creations</h1>
+            <p className="text-sm text-gray-600 mt-2">Browse and manage your creative works</p>
             {lastSync && (
               <p className="text-sm text-gray-500 mt-1 flex items-center">
                 <Calendar size={14} className="mr-1" />

@@ -171,13 +171,11 @@ const ReportsManager = () => {
     <div className="container mx-auto px-4 py-8">
       {/* Header Section */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-end md:items-end gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-1 flex items-center">
-              <BarChart2 className="text-[#e6d281] mr-2" size={24} />
-              Reports Manager
-            </h1>
-            <p className="text-gray-600">Generate and manage system reports</p>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
+            <h1 className="serif text-5xl leading-none text-gray-900">Reports</h1>
+            <p className="text-sm text-gray-600 mt-2">Generate and manage system reports</p>
           </div>
           <div className="flex gap-3">
             <button 

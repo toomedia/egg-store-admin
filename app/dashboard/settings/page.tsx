@@ -52,10 +52,13 @@ const SettingsPage = () => {
       {/* Header with Page Title */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <Settings className="text-[#e6d281] mr-3" size={24} />
-              <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
+          <div className="flex items-center justify-between min-h-[4.5rem] py-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Dashboard</p>
+              <div className="flex items-center gap-3">
+                <Settings className="text-[#e6d281] shrink-0" size={28} />
+                <h1 className="serif text-4xl leading-none text-gray-900">Settings</h1>
+              </div>
             </div>
           </div>
           

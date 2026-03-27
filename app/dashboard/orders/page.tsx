@@ -5,22 +5,39 @@ import Image from "next/image";
 import { getItem, setItem } from "@/utils/indexedDB";
 import { supabase } from "../../../utils/supabaseClient";
 import {
-  Package,
   Search,
-  Filter,
   User,
   ArrowLeft,
-  Edit,
   Loader,
   RefreshCw,
   X,
+  Calendar,
+  Package,
 } from "lucide-react";
+
+function collectPreviewImages(designs: any[], max: number): string[] {
+  const out: string[] = [];
+  if (!Array.isArray(designs)) return Array(max).fill("/placeholder.png");
+  for (const design of designs) {
+    if (out.length >= max) break;
+    if (Array.isArray(design?.images) && design.images.length > 0) {
+      for (const u of design.images) {
+        if (out.length >= max) break;
+        out.push(u);
+      }
+    } else if (design?.image) {
+      out.push(design.image);
+    }
+  }
+  while (out.length < max) out.push("/placeholder.png");
+  return out.slice(0, max);
+}
 
 const OrdersPage = () => {
   const searchParams = useSearchParams();
-  const urlSearchQuery = searchParams.get('q') || '';
+  const urlSearchQuery = searchParams.get("q") || "";
   const [searchQuery, setSearchQuery] = useState(urlSearchQuery);
-    
+
   const [orders, setOrders] = useState<any[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,20 +46,21 @@ const OrdersPage = () => {
   const DB_NAME = "egg-store-db";
   const STORE_NAME = "orders";
 
-  // Filter orders based on search query
   useEffect(() => {
     if (!searchQuery) {
       setFilteredOrders(orders);
     } else {
-      const filtered = orders.filter((order) => {
-        const search = searchQuery.toLowerCase();
-        return (
-          (order.order_id?.toLowerCase() || "").includes(search) ||
-          (order.user_info?.firstName?.toLowerCase() || "").includes(search) ||
-          (order.user_info?.email?.toLowerCase() || "").includes(search)
-        );
-      });
-      setFilteredOrders(filtered);
+      const search = searchQuery.toLowerCase();
+      setFilteredOrders(
+        orders.filter((order) => {
+          const id = String(order.id ?? order.order_id ?? "");
+          return (
+            id.toLowerCase().includes(search) ||
+            (order.user_info?.firstName?.toLowerCase() || "").includes(search) ||
+            (order.user_info?.email?.toLowerCase() || "").includes(search)
+          );
+        })
+      );
     }
   }, [orders, searchQuery]);
 
@@ -52,50 +70,37 @@ const OrdersPage = () => {
         let allOrders: any[] = [];
         let shouldFetchFromSupabase = true;
 
-        // First try to get orders from IndexedDB
         try {
           const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
           if (Array.isArray(storedOrders) && storedOrders.length > 0) {
             allOrders = storedOrders;
             shouldFetchFromSupabase = false;
-            console.log("🚀 Loaded orders from IndexedDB:", allOrders.length);
           }
-        } catch (indexedDBError) {
-          console.warn(
-            "IndexedDB not available or empty, fetching from Supabase:",
-            indexedDBError
-          );
+        } catch {
+          /* use network */
         }
 
         if (shouldFetchFromSupabase) {
-          console.log("Fetching orders from Supabase");
           const { data, error } = await supabase
             .from("orders")
             .select("*")
             .order("created_at", { ascending: false });
           if (error) {
-            console.error("🚀 Error fetching orders:", error);
             setError("Failed to load orders. Please refresh the page.");
             setLoading(false);
             return;
           }
           allOrders = data || [];
-
-          // Store in IndexedDB for future use
           try {
             await setItem(DB_NAME, STORE_NAME, "allOrders", allOrders);
-            console.log("Saved orders to IndexedDB:", allOrders.length);
-          } catch (indexedDBError) {
-            console.warn("Could not save to IndexedDB:", indexedDBError);
+          } catch {
+            /* optional cache */
           }
-
-          console.log("Fetched orders from Supabase:", allOrders.length);
         }
 
         setOrders(allOrders);
         setLoading(false);
-      } catch (err) {
-        console.error(" Unexpected error:", err);
+      } catch {
         setError("An unexpected error occurred. Please try again.");
         setLoading(false);
       }
@@ -103,28 +108,20 @@ const OrdersPage = () => {
 
     fetchAllOrders();
 
-    // Realtime subscription for orders
     const channel = supabase
       .channel("public:orders")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "orders" },
         async (payload) => {
-          console.log("🚀 New order inserted:", payload.new);
           try {
-            const storedOrders = await getItem(
-              DB_NAME,
-              STORE_NAME,
-              "allOrders"
-            );
-            const existingOrders: any[] = Array.isArray(storedOrders)
-              ? storedOrders
-              : [];
-            const updatedOrders = [payload.new, ...existingOrders]; // Add new order to the beginning
+            const storedOrders = await getItem(DB_NAME, STORE_NAME, "allOrders");
+            const existingOrders: any[] = Array.isArray(storedOrders) ? storedOrders : [];
+            const updatedOrders = [payload.new, ...existingOrders];
             await setItem(DB_NAME, STORE_NAME, "allOrders", updatedOrders);
             setOrders(updatedOrders);
           } catch (err) {
-            console.error("Error handling insert:", err);
+            console.error("Error handling order change:", err);
           }
         }
       )
@@ -135,14 +132,9 @@ const OrdersPage = () => {
     };
   }, []);
 
-  const FallbackImage = ({ 
-    src, 
-    alt, 
-    fallbackSrc = "/placeholder.png", 
-    ...props 
-  }: any) => {
+  const FallbackImage = ({ src, alt, fallbackSrc = "/placeholder.png", ...props }: any) => {
     const [imgSrc, setImgSrc] = useState(src);
-    const [loading, setLoading] = useState(true);
+    const [imgLoading, setImgLoading] = useState(true);
 
     return (
       <div className="relative w-full h-full">
@@ -151,16 +143,16 @@ const OrdersPage = () => {
           src={imgSrc || fallbackSrc}
           alt={alt}
           fill
-          className="object-cover p-1"
-          onLoadingComplete={() => setLoading(false)}
+          className="object-cover"
+          onLoadingComplete={() => setImgLoading(false)}
           onError={() => {
             setImgSrc(fallbackSrc);
-            setLoading(false);
+            setImgLoading(false);
           }}
         />
-        {loading && (
-          <div className="absolute inset-0 bg-gray-200 animate-pulse flex items-center justify-center">
-            <Loader className="animate-spin text-gray-400" size={16} />
+        {imgLoading && (
+          <div className="absolute inset-0 bg-gray-100 animate-pulse flex items-center justify-center">
+            <Loader className="animate-spin text-gray-400" size={14} />
           </div>
         )}
       </div>
@@ -176,30 +168,26 @@ const OrdersPage = () => {
         .select("*")
         .order("created_at", { ascending: false });
       if (error) {
-        console.error("Error refreshing orders:", error);
         setError("Failed to refresh orders. Please try again.");
         setLoading(false);
         return;
       }
-
       const allOrders = data || [];
       try {
         await setItem(DB_NAME, STORE_NAME, "allOrders", allOrders);
-      } catch (indexedDBError) {
-        console.warn("Could not save to IndexedDB:", indexedDBError);
+      } catch {
+        /* ignore */
       }
-
       setOrders(allOrders);
       setLoading(false);
-    } catch (err) {
-      console.error("Unexpected error refreshing orders:", err);
+    } catch {
       setError("An unexpected error occurred. Please try again.");
       setLoading(false);
     }
   };
 
   const formatDate = (dateString: string) => {
-    if (!dateString) return "Unknown date";
+    if (!dateString) return "—";
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
@@ -210,408 +198,203 @@ const OrdersPage = () => {
   };
 
   const getName = (design: any) => {
-    return design?.preset_name?.en_name || design?.name || "Untitled Design";
+    return design?.preset_name?.en_name || design?.name || "Untitled";
   };
 
-  const getCategory = (design: any) => {
-    return (
-      design?.preset_category?.en_category ||
-      design?.category ||
-      "Uncategorized"
-    );
-  };
+  const errBanner = error && (
+    <div className="mb-6 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-300 flex justify-between items-center gap-3">
+      <span>{error}</span>
+      <button type="button" onClick={() => setError(null)} className="text-red-200 hover:text-white shrink-0">
+        <X size={18} />
+      </button>
+    </div>
+  );
 
-  const getRandomImagesForDesigns = (designs: any[], count: number = 8) => {
-    const images: string[] = [];
-  
-    if (!Array.isArray(designs) || designs.length === 0) return images;
-  
-    for (const design of designs) {
-       if (Array.isArray(design?.images) && design.images.length > 0) {
-         // Shuffle the images and take up to `count`
-         const shuffled = [...design.images].sort(() => 0.5 - Math.random());
-         images.push(...shuffled.slice(0, count));
-       } else if (design?.image) {
-        images.push(design.image);
-      }
-    }
-  
-    // Ensure we only return `count` items max
-    const final = images.slice(0, count);
-  
-    // If fewer than `count`, fill with placeholders
-    while (final.length < count) {
-      final.push("/placeholder.png");
-    }
-  
-    return final;
-  };
-
-  // Function to generate egg images for the grid
-  const generateEggGrid = (designs: any[]) => {
-    const totalEggs = 36; // 6x6 grid
-    const eggImages: string[] = [];
-
-    // Collect all images from designs
-    const allEggImages: string[] = [];
-    for (const design of designs) {
-      if (design?.images?.length > 0) {
-        allEggImages.push(...design.images);
-      } else if (design?.image) {
-        allEggImages.push(design.image);
-      }
-    }
-
-    // Fill grid
-    for (let i = 0; i < totalEggs; i++) {
-      if (allEggImages.length > 0) {
-        const randomIndex = Math.floor(Math.random() * allEggImages.length);
-        eggImages.push(allEggImages[randomIndex]);
-      } else {
-        eggImages.push("/placeholder.png");
-      }
-    }
-
-    return eggImages;
-  };
-
-  // ----------- ORDER DETAIL VIEW ------------
   if (selectedOrder) {
     const { user_info, preset_object } = selectedOrder;
-    const designs = Array.isArray(preset_object)
-      ? preset_object
-      : [preset_object];
-    // Generate egg grid for the detail view
-    const eggGridImages = generateEggGrid(designs);
+    const designs = Array.isArray(preset_object) ? preset_object : [preset_object];
+    const previewImages = collectPreviewImages(designs, 12);
 
     return (
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <button
-          onClick={() => setSelectedOrder(null)}
-          className="mb-6 flex items-center text-[#e6d281] hover:text-[#d4c070] transition-colors"
-        >
-          <ArrowLeft className="mr-2" size={18} />
-          Back to Orders
-        </button>
+      <div className="pp">
+        <div className="max-w-3xl mx-auto px-6 py-10">
+          <button
+            type="button"
+            onClick={() => setSelectedOrder(null)}
+            className="flex items-center gap-2 text-gray-600 hover:text-[#e6d281] transition-colors mb-8 text-sm"
+          >
+            <ArrowLeft size={15} /> Back
+          </button>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex justify-between items-center">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-800">
-              <X size={20} />
-            </button>
-          </div>
-        )}
+          {errBanner}
 
-        {/* Main Order Container */}
-        <div className="bg-white rounded-lg shadow-sm">
-          {/* Order Header */}
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Order</p>
+          <h1 className="serif text-4xl text-gray-900 mb-1">#{selectedOrder.id}</h1>
+          <p className="text-sm text-gray-600 mb-8 flex items-center gap-2">
+            <Calendar size={14} />
+            {formatDate(selectedOrder.created_at)}
+          </p>
+
+          <div className="card p-5 mb-6 space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
-                <h3 className="text-sm font-medium text-gray-800 truncate cursor-pointer">
-                  Order #{selectedOrder.id}
-                </h3>
-                <div className="flex items-center mt-1 text-sm text-gray-500">
-                  <Edit className="mr-1.5" size={14} />
-                  {formatDate(selectedOrder.created_at)}
-                </div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Customer</p>
+                <p className="text-sm">{user_info?.fullName || "—"}</p>
+                <p className="text-xs text-gray-600 mt-1">{user_info?.email || "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Payment</p>
+                <p className="text-sm text-[#e6d281]">${selectedOrder.payment || "0.00"}</p>
+                <p className="text-xs text-gray-600 mt-1">{selectedOrder.payment_method || "—"}</p>
               </div>
             </div>
-          </div>
 
-          <div className="p-6">
-            {/* Customer & Order Info Section */}
-            <section className="mb-8">
-              <h2 className="text-lg font-medium text-gray-800 mb-4">
-                Order Summary
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Customer Column */}
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">
-                    CUSTOMER
-                  </h3>
-                  <p className="text-gray-800">{user_info?.fullName}</p>
-                  <p className="text-gray-600 mt-1">{user_info?.email}</p>
-                </div>
-
-                {/* Payment Column */}
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">
-                    PAYMENT
-                  </h3>
-                  <p className="text-gray-800 font-medium">
-                    ${selectedOrder.payment || "0.00"}
-                  </p>
-                  <p className="text-gray-600 mt-1">
-                    {selectedOrder.payment_method || "Credit Card"}
-                  </p>
-                </div>
+            {designs.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Items</p>
+                <p className="text-sm font-medium">{getName(designs[0])}</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Quantity {designs.reduce((sum, d) => sum + (d?.quantity || 1), 0)}
+                </p>
               </div>
-            </section>
+            )}
 
-            {/* Order Items Section */}
-            <section>
-              <h2 className="text-lg font-medium text-gray-800 mb-4">
-                {designs.length} {designs.length === 1 ? "Item" : "Items"}{" "}
-                Purchased
-              </h2>
-
-              {/* Product Name and Category (shown once) */}
-              {designs.length > 0 && (
-                <div className="mb-4">
-                  <h3 className="font-medium text-gray-800">
-                    {getName(designs[0])}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {getCategory(designs[0])}
-                  </p>
-                </div>
-              )}
-
-              {/* Egg Grid - 6x6 layout */}
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">
-                  Egg Designs Preview
-                </h4>
-                <div className="grid grid-cols-6 gap-2 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                  {eggGridImages.map((image, index) => (
-                    <div
-                      key={index}
-                      className="relative aspect-square bg-gray-50 rounded border overflow-hidden"
-                    >
-                      <Image
-                        src={image}
-                        alt={`Egg design ${index + 1}`}
-                        fill
-                        className="object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = "/placeholder.png";
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-3">Preview</p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {previewImages.map((image, index) => (
+                  <div
+                    key={index}
+                    className="relative h-20 w-20 shrink-0 rounded-lg overflow-hidden bg-gray-100"
+                  >
+                    <Image
+                      src={image}
+                      alt=""
+                      fill
+                      className="object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/placeholder.png";
+                      }}
+                    />
+                  </div>
+                ))}
               </div>
-              {/* Quantity Summary */}
-              <div className="text-sm text-gray-800">
-                Total Quantity:{" "}
-                {designs.reduce((sum, d) => sum + (d?.quantity || 1), 0)}
-              </div>
-            </section>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // ---------- ORDER LIST VIEW -----------
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
-      {/* Header */}
-      <div className="mb-8 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-[#f8f5e8]">
-            <Package className="text-[#e6d281]" size={24} />
-          </div>
+    <div className="pp">
+      <div className="max-w-5xl mx-auto px-6 py-10">
+        <div className="flex items-end justify-between mb-10 flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">
-              Order Management
-            </h1>
-            <p className="text-gray-600">View and manage customer orders</p>
-            
-            {/* Search Status */}
-            {searchQuery && (
-              <div className="mt-2">
-                <p className="text-sm text-gray-600">
-                  Showing results for: <span className="font-semibold text-[#e6d281]">"{searchQuery}"</span>
-                  <span className="ml-2 text-xs bg-[#e6d281] bg-opacity-20 px-2 py-1 rounded-full">
-                    {filteredOrders.length} order(s) found
-                  </span>
-                </p>
-              </div>
-            )}
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
+            <h1 className="serif text-5xl leading-none text-gray-900">Orders</h1>
           </div>
-        </div>
-        <button
-          onClick={refreshOrders}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-[#e6d281] text-white rounded-lg hover:bg-[#d4c070] disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw className={loading ? "animate-spin" : ""} size={16} />
-          Refresh
-        </button>
-      </div>
-
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 flex justify-between items-center">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-800">
-            <X size={20} />
+          <button
+            type="button"
+            onClick={refreshOrders}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:text-amber-900 hover:border-[#e6d281]/40 transition-all text-sm disabled:opacity-40"
+          >
+            <RefreshCw className={loading ? "animate-spin" : ""} size={16} />
+            Refresh
           </button>
         </div>
-      )}
 
-      {/* Search */}
-      <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-8">
-        <div className="relative max-w-md">
+        <div className="flex gap-8 mb-8 pb-8 border-b border-gray-200 flex-wrap items-end">
+          <div>
+            <p className="text-3xl font-light">{orders.length}</p>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mt-0.5">Total</p>
+          </div>
+          {searchQuery && (
+            <div className="ml-auto">
+              <p className="text-sm text-gray-600">
+                {filteredOrders.length} match{filteredOrders.length !== 1 ? "es" : ""} for{" "}
+                <span className="text-[#e6d281]">&quot;{searchQuery}&quot;</span>
+              </p>
+            </div>
+          )}
+        </div>
+
+        {errBanner}
+
+        <div className="relative max-w-md mb-8">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="text-gray-400" size={18} />
+            <Search className="text-gray-500" size={18} />
           </div>
           <input
             type="text"
-            placeholder="Search by order ID, name, or email..."
-            className="pl-10 w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#e6d281] focus:border-transparent"
+            placeholder="Search order ID, name, or email…"
+            className="ifield pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-      </div>
 
-      {/* Orders Grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => (
-            <div
-              key={i}
-              className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm animate-pulse"
-            >
-              <div className="flex gap-3 mb-4">
-                <div className="w-16 h-16 bg-gray-200 rounded-lg"></div>
-                <div className="w-16 h-16 bg-gray-200 rounded-lg"></div>
-              </div>
-              <div className="h-5 bg-gray-200 rounded w-3/4 mb-3"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
-              <div className="h-3 bg-gray-200 rounded w-full mb-2"></div>
-              <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+        {loading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="card p-4 animate-pulse h-24 bg-[#141414]" />
+            ))}
+          </div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-5 border border-gray-200">
+              <Package size={22} className="text-gray-400" />
             </div>
-          ))}
-        </div>
-      ) : filteredOrders.length === 0 ? (
-        <div className="bg-white p-12 rounded-xl shadow-sm border border-gray-200 text-center">
-          <Package className="mx-auto text-gray-300 mb-4" size={48} />
-          <h3 className="text-lg font-medium text-gray-700 mb-1">
-            {searchQuery ? 'No matching orders found!' : 'No orders found!'}
-          </h3>
-          <p className="text-gray-500">
-            {searchQuery 
-              ? `No orders found matching "${searchQuery}". Try a different search term.`
-              : 'No orders have been placed yet.'
-            }
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* Results Summary */}
-          {searchQuery && (
-            <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm text-blue-700">
-                Found <span className="font-semibold">{filteredOrders.length}</span> order(s) matching "<span className="font-semibold">{searchQuery}</span>"
-              </p>
-            </div>
-          )}
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredOrders.map((order) => {
-              const designs = Array.isArray(order.preset_object)
-                ? order.preset_object
-                : [order.preset_object];
-
-              // Get six random images from all available images in the order
-              const randomImages = getRandomImagesForDesigns(designs, 8);
-
+            <h3 className="text-base mb-1">{searchQuery ? "No results" : "No orders yet"}</h3>
+            <p className="text-xs text-gray-500 max-w-sm">
+              {searchQuery ? `Nothing matches “${searchQuery}”.` : "Orders will show here when customers checkout."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredOrders.map((order, idx) => {
+              const designs = Array.isArray(order.preset_object) ? order.preset_object : [order.preset_object];
+              const thumbs = collectPreviewImages(designs, 8);
               const customerName = order.user_info?.firstName
-                ? `${order.user_info.firstName} ${order.user_info.lastName || ""}`
-                : "Unknown Customer";
+                ? `${order.user_info.firstName} ${order.user_info.lastName || ""}`.trim()
+                : "Unknown";
 
               return (
-                <div
+                <button
                   key={order.id}
-                  className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-all group"
+                  type="button"
+                  onClick={() => setSelectedOrder(order)}
+                  className="card fu w-full text-left p-4 flex flex-col sm:flex-row sm:items-center gap-4"
+                  style={{ animationDelay: `${idx * 25}ms` }}
                 >
-                  {/* Images Section - 4x2 grid */}
-                  <div
-                    className="p-4 bg-gray-50 border-b border-gray-200 cursor-pointer"
-                    onClick={() => setSelectedOrder(order)}
-                  >
-                    <div className="grid grid-cols-4 gap-2">
-                      {randomImages.map((image, idx) => (
-                        <div
-                          key={idx}
-                          className="relative aspect-square rounded-lg overflow-hidden bg-white"
-                        >
-                          <FallbackImage
-                            src={image}
-                            alt={`Preset image ${idx + 1}`}
-                          />
-
-                          {idx === 7 && designs.length > 8 && (
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs font-medium">
-                              +{designs.length - 8}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Order Info Section */}
-                  <div className="p-5">
-                    <div className="mb-4">
-                      <h3
-                        className="text-sm font-medium text-gray-800 truncate cursor-pointer"
-                        onClick={() => setSelectedOrder(order)}
-                      >
-                        Order #{order.id}
-                      </h3>
-
-                      <p className="text-sm text-gray-600 mt-1 flex items-center">
-                        <User className="mr-1.5" size={14} />
-                        {customerName}
-                      </p>
-                    </div>
-
-                    {/* Design Names and Categories */}
-                    <div className="mb-4 space-y-2">
-                      {designs.length > 0 && (
-                        <div>
-                          <p className="text-sm font-medium text-gray-800 truncate">
-                            {getName(designs[0])}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {getCategory(designs[0])}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">
-                          ${order.payment || "0.00"}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {formatDate(order.created_at)}
-                        </p>
+                  <div className="flex gap-1.5 shrink-0 overflow-x-auto">
+                    {thumbs.map((src, i) => (
+                      <div key={i} className="relative w-11 h-11 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+                        <FallbackImage src={src} alt="" />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Edit
-                          className="text-gray-400 group-hover:text-[#e6d281] transition-colors cursor-pointer"
-                          size={18}
-                          onClick={() => setSelectedOrder(order)}
-                        />
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">Order #{order.id}</p>
+                    <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
+                      <User size={10} />
+                      {customerName}
+                    </p>
+                    {designs.length > 0 && (
+                      <p className="text-xs text-gray-600 truncate mt-1">{getName(designs[0])}</p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm text-[#e6d281]">${order.payment || "0.00"}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">{formatDate(order.created_at)}</p>
+                  </div>
+                </button>
               );
             })}
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 };

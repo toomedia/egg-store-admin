@@ -81,8 +81,8 @@ export default function page() {
             <div className="inline-flex items-center justify-center w-24 h-24 bg-white/20 backdrop-blur-sm rounded-3xl mb-8 shadow-2xl">
               <Shield className="w-12 h-12" />
             </div>
-            <h1 className="text-5xl font-bold mb-6 tracking-tight">Egg Store</h1>
-            <h2 className="text-2xl font-light opacity-90 mb-4">Admin Portal</h2>
+            <h1 className="font-serif text-5xl font-bold mb-6 tracking-tight">Egg Store</h1>
+            <h2 className="font-serif text-2xl font-light opacity-90 mb-4">Admin Portal</h2>
             <p className="text-lg opacity-80 max-w-md mx-auto leading-relaxed">
               Streamline your egg store operations with our comprehensive admin dashboard
             </p>
@@ -128,13 +128,13 @@ export default function page() {
             <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#e6d281] to-[#d4c070] rounded-3xl mb-6 shadow-lg">
               <Shield className="w-10 h-10 text-gray-800" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-3">Welcome Back</h1>
+            <h1 className="font-serif text-3xl font-bold text-gray-800 mb-3">Welcome Back</h1>
             <p className="text-gray-600 text-lg">Sign in to your admin account</p>
           </div>
 
           {/* Desktop Header */}
           <div className="hidden lg:block mb-10 text-center">
-            <h1 className="text-4xl font-bold text-gray-800 mb-3 tracking-tight">Welcome back</h1>
+            <h1 className="font-serif text-4xl font-bold text-gray-800 mb-3 tracking-tight">Welcome back</h1>
             <p className="text-gray-600 text-lg">Sign in to your admin account to continue</p>
           </div>
 

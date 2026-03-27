@@ -90,7 +90,7 @@ const Topbar: React.FC = () => {
   const avatarInitial = displayName[0].toUpperCase();
 
   return (
-    <header className="bg-white w-full px-6 py-3 flex items-center justify-between shadow-sm font-manrope border-b border-gray-100">
+    <header className="bg-white w-full px-6 py-3 flex items-center justify-between shadow-sm font-sans border-b border-gray-100">
       {/* Search bar */}
       <div className="relative w-full max-w-sm">
         <span className="absolute inset-y-0 left-3 flex items-center text-gray-400">
