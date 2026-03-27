@@ -88,7 +88,7 @@ const Page = () => {
   const handleAutoGenerate = async () => {
     const env = (globalThis as any).process?.env ?? {};
     // const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
-    const apiUrl = "all-about-eggs-git-feature-preset-minting-toomedias-projects.vercel.app"
+    const apiUrl = "https://all-about-eggs-git-feature-preset-minting-toomedias-projects.vercel.app"
    const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
     console.log("🚀 ~ handleAutoGenerate ~ adminKey:", adminKey)
     if (!apiUrl || !adminKey) { setGenResult({ success: false, message: 'API not configured.' }); return; }
