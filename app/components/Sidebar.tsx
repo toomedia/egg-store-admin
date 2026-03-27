@@ -1,90 +1,49 @@
 'use client';
 
-import React, { useState, useCallback } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
-  Egg,
   LayoutDashboard,
   ShoppingCart,
-  Settings,
   Box,
   LogOut,
-  Users,
-  Image,
-  Shield,
-  FileText,
   Clock,
   Sparkles,
+  Shield,
   Menu,
   X,
 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-5 w-5" /> },
-{ href: "/dashboard/orders", label: "Orders", icon: <ShoppingCart className="h-5 w-5" /> },
-{ href: "/dashboard/customer", label: "Customer", icon: <Users className="h-5 w-5" /> },
-{ href: "/dashboard/presets", label: "Presets", icon: <Box className="h-5 w-5" /> },
-{ 
-  href: "/dashboard/preset-requests", 
-  label: "Preset Requests", 
-  icon: <Clock className="h-5 w-5" /> 
-},
-{ href: "/dashboard/ownCreations", label: "Own Creations", icon: <Sparkles className="h-5 w-5" /> },
-{ href: "/dashboard/adminManage", label: "Admin Manager", icon: <Shield className="h-5 w-5" /> },
+    { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-5 w-5" /> },
+    { href: "/dashboard/orders", label: "Orders", icon: <ShoppingCart className="h-5 w-5" /> },
+    { href: "/dashboard/presets", label: "Presets", icon: <Box className="h-5 w-5" /> },
+    { href: "/dashboard/preset-requests", label: "Preset Requests", icon: <Clock className="h-5 w-5" /> },
+    { href: "/dashboard/ownCreations", label: "Own Creations", icon: <Sparkles className="h-5 w-5" /> },
+    { href: "/dashboard/adminManage", label: "Admin Manager", icon: <Shield className="h-5 w-5" /> },
   ];
 
   const isActive = (href: string) => {
     return (
       pathname === href ||
-      (href !== "/dashboard" && pathname.startsWith(href)) ||
-      (pathname === "/dashboard" && href === "/dashboard")
+      (href !== "/dashboard" && pathname.startsWith(href))
     );
   };
 
-  const handleLogout = useCallback(async () => {
-    try {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      sessionStorage.removeItem('auth');
-      
-      // Clear cookies
-      document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-      document.cookie = 'session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-      
-   
-      setMobileMenuOpen(false);
-      
-      // Use setTimeout to defer navigation
-      setTimeout(() => {
-        router.push('/auth');
-      }, 0);
-      
-    } catch (error) {
-      console.error('Logout failed:', error);
-      alert('Logout failed. Please try again.');
-    }
-  }, [router]);
-
-  // Alternative: Hard redirect without router
-  const handleLogoutAlternative = () => {
-    // Clear all storage
+  const handleLogout = () => {
     localStorage.clear();
     sessionStorage.clear();
-    
-    // Clear cookies
     document.cookie.split(";").forEach((c) => {
       document.cookie = c
         .replace(/^ +/, "")
         .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
     });
-    
-    // Hard redirect - most reliable
     window.location.href = '/auth';
   };
 
@@ -94,66 +53,77 @@ export default function Sidebar() {
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-2 rounded-md bg-white text-gray-700 border shadow-sm focus:outline-none focus:ring-2 focus:ring-[#e6d281] font-manrope"
+          className="p-2 rounded-md bg-[#0e0743] text-white shadow-sm focus:outline-none"
         >
           {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
       </div>
 
+      {/* Mobile overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-30 bg-black/40"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-40 w-64 h-screen bg-white border-r border-gray-200 transform ${
+        className={`fixed top-0 left-0 z-40 w-64 h-screen bg-[#111] transform ${
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0 transition-transform duration-200 ease-in-out font-manrope flex flex-col`}
       >
-        {/* Top (Logo + Navigation) */}
-        <div className="flex flex-col flex-grow overflow-y-auto">
-          {/* Logo Section */}
-          <div className="p-6 border-b border-gray-200">
-            <Link
-              href="/"
-              className="flex items-center space-x-3 hover:opacity-90 transition-opacity"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <div className="bg-[#e6d281]/30 p-2 rounded-xl shadow-sm">
-                <Egg className="h-6 w-6 text-[#e6d281]" />
-              </div>
-              <div>
-                <div className="flex flex-col leading-tight">
-                  <h1 className="text-2xl font-bold tracking-tight text-gray-900">Eggception</h1>
-                  <span className="text-base text-gray-500">Admin Dashboard</span>
-                </div>
-              </div>
-            </Link>
-          </div>
-
-          {/* Navigation Items */}
-          <nav className="flex-grow overflow-y-auto px-4 py-3 space-y-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-3 py-3 rounded-md text-base font-medium transition-colors ${
-                  isActive(item.href)
-                    ? "bg-[#e6d281]/20 text-[#e6d281] font-semibold"
-                    : "text-gray-700 hover:bg-gray-50"
-                } font-manrope`}
-              >
-                <span className={`${isActive(item.href) ? "text-[#e6d281]" : "text-gray-500"}`}>
-                  {item.icon}
-                </span>
-                <span>{item.label}</span>
-              </Link>
-            ))}
-          </nav>
-        </div>
-        <div className="p-4 border-t border-gray-200">
-          <button
-            onClick={handleLogoutAlternative} 
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md text-base font-medium text-red-600 hover:bg-red-50 transition-colors font-manrope"
+        {/* Logo Section */}
+        <div className="px-5 py-5 border-b border-white/10">
+          <Link
+            href="/"
+            className="flex items-center gap-3 hover:opacity-90 transition-opacity"
+            onClick={() => setMobileMenuOpen(false)}
           >
-            <LogOut className="h-5 w-5" />
+            <div className="relative h-8 w-8 flex-shrink-0">
+              <Image
+                src="/logo.png"
+                alt="Eggception"
+                fill
+                className="object-contain"
+                sizes="32px"
+              />
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="text-white font-bold text-lg tracking-tight">Eggception</span>
+              <span className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Admin</span>
+            </div>
+          </Link>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-grow overflow-y-auto px-3 py-4 space-y-0.5">
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMobileMenuOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                isActive(item.href)
+                  ? "bg-[#e6d281]/15 text-[#e6d281]"
+                  : "text-white/60 hover:text-white hover:bg-white/8"
+              }`}
+            >
+              <span className={`flex-shrink-0 ${isActive(item.href) ? "text-[#e6d281]" : "text-white/40"}`}>
+                {item.icon}
+              </span>
+              <span>{item.label}</span>
+            </Link>
+          ))}
+        </nav>
+
+        {/* Logout */}
+        <div className="px-3 pb-4 border-t border-white/10 pt-3">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-red-400 hover:bg-white/5 transition-colors"
+          >
+            <LogOut className="h-5 w-5 flex-shrink-0" />
             <span>Logout</span>
           </button>
         </div>

@@ -19,15 +19,10 @@ import {
   ShoppingCart,
   Box,
   BarChart3,
-  Clock,
   Plus,
   Eye,
-  User,
   AlertTriangle,
   TrendingUp,
-  TrendingDown,
-  Package,
-  CreditCard,
   DollarSign,
   Users,
   RefreshCw,
@@ -184,7 +179,7 @@ const Dashboard = () => {
       const monthData = last6Months.find(m => m.name === monthName);
       if (monthData) {
         monthData.orders += 1;
-        monthData.revenue += order.total_amount || 44;
+        monthData.revenue += order.total_amount || 0;
       }
     }
   });
@@ -229,7 +224,7 @@ const processUserGrowthData = (usersData: any[]) => {
     
     const totalRevenue = ordersData
       .filter(order => order.payment_status === 'completed')
-      .reduce((sum, order) => sum + (order.total_amount || 44), 0);
+      .reduce((sum, order) => sum + (order.total_amount || 0), 0);
     const avgOrderValue = completedOrders > 0 ? totalRevenue / completedOrders : 0;
     
     const userOrderCount: {[key: string]: number} = {};
@@ -429,28 +424,28 @@ const processUserGrowthData = (usersData: any[]) => {
           title="Total Orders"
           value={orders.length}
           icon={<ShoppingCart className="w-6 h-6" />}
-          color="bg-[#e6d281]"
+          color="bg-blue-500"
         />
         <StatCard
           title="Active Presets"
           value={presets.length}
           icon={<Box className="w-6 h-6" />}
-          color="bg-[#e6d281]"
+          color="bg-indigo-500"
         />
         <StatCard
           title="Total Users"
           value={users.length}
           icon={<Users className="w-6 h-6" />}
-          color="bg-[#e6d281]"
+          color="bg-emerald-500"
         />
         <StatCard
           title="Total Revenue"
           value={`$${orders
             .filter(order => order.payment_status === 'completed')
-            .reduce((total, order) => total + (order.total_amount || 44), 0)
+            .reduce((total, order) => total + (order.total_amount || 0), 0)
             .toLocaleString()}`}
           icon={<DollarSign className="w-6 h-6" />}
-          color="bg-[#e6d281]"
+          color="bg-[#c9b655]"
         />
       </div>
 
@@ -593,134 +588,6 @@ const processUserGrowthData = (usersData: any[]) => {
         )}
       </div>
 
-      {/* Best Selling Presets */}
-      <div className="bg-white rounded-xl shadow mb-6 overflow-hidden">
-        <div 
-          className="flex justify-between items-center p-5 cursor-pointer"
-          onClick={() => toggleSection('bestSellers')}
-        >
-          <h2 className="font-semibold text-xl flex items-center gap-2">
-            <Package className="w-5 h-5 text-[#e6d281]" />
-            Best Selling Presets
-          </h2>
-          {expandedSections.bestSellers ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-        </div>
-        {expandedSections.bestSellers && (
-          <div className="p-5 pt-0">
-            {presetSalesData.length === 0 ? (
-              <p className="text-gray-400 text-base text-center py-8">No sales data available.</p>
-            ) : (
-              <div className="space-y-4">
-                {presetSalesData.map((preset) => (
-                  <BestSellerRow
-                    key={preset.id}
-                    title={preset.title}
-                    description={preset.description}
-                    image={preset.image}
-                    price={preset.price}
-                   
-                   
-                  />
-                ))}
-              </div>
-            )}
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <Link href="/dashboard/presets">
-                <button className="w-full flex items-center justify-center gap-2 text-[#e6d281] hover:text-[#d4c073] transition-colors">
-                  View all presets
-                  <Eye className="w-4 h-4" />
-                </button>
-              </Link>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Latest Orders Section */}
-      <div className="bg-white rounded-xl shadow mb-6 overflow-hidden">
-        <div 
-          className="flex justify-between items-center p-5 cursor-pointer"
-          onClick={() => toggleSection('recentOrders')}
-        >
-          <h2 className="font-semibold text-xl flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-[#e6d281]" />
-            Latest Orders
-          </h2>
-          {expandedSections.recentOrders ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-        </div>
-        {expandedSections.recentOrders && (
-          <div className="p-5 pt-0">
-            {latestOrders.length === 0 ? (
-              <p className="text-gray-400 text-base text-center py-8">No orders found.</p>
-            ) : (
-              <div className="space-y-4">
-                {latestOrders.map((order) => (
-                  <div key={order.id} className="flex items-center p-4 bg-gray-50 rounded-lg border border-gray-100 hover:shadow-md transition-all duration-200">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-semibold text-gray-900 text-base truncate">
-                          {order.preset?.preset_name?.en_name || "Egg Card"}
-                        </h3>
-                        <span className="text-base font-bold text-green-600 ml-2">
-                          ${order.total_amount || 44}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center text-sm text-gray-500">
-                          <User className="w-4 h-4 mr-1" />
-                          <span className="truncate">{order.user_info?.email || "Unknown"}</span>
-                        </div>
-                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Completed
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right ml-4">
-                      <p className="text-sm text-gray-400 whitespace-nowrap">
-                        {new Date(order.created_at).toLocaleDateString()}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <Link href="/dashboard/orders">
-                <button className="w-full flex items-center justify-center gap-2 text-[#e6d281] hover:text-[#d4c073] transition-colors">
-                  View all orders
-                  <Eye className="w-4 h-4" />
-                </button>
-              </Link>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Recent Activity */}
-      <div className="bg-white rounded-xl shadow overflow-hidden">
-        <div 
-          className="flex justify-between items-center p-5 cursor-pointer"
-          onClick={() => toggleSection('activity')}
-        >
-          <h2 className="font-semibold text-xl flex items-center gap-2">
-            <Clock className="w-5 h-5 text-[#e6d281]" />
-            Recent Activity
-          </h2>
-          {expandedSections.activity ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-        </div>
-        {expandedSections.activity && (
-          <div className="p-5 pt-0 space-y-4 text-base">
-            {activities.length === 0 ? (
-              <p className="text-gray-400 text-base text-center py-8">No recent activity found.</p>
-            ) : (
-              activities.map((act, i) => <ActivityRow key={i} {...act} />)
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 };
@@ -781,15 +648,14 @@ const SafeImage = ({ src, alt, className }: { src: string, alt: string, classNam
   );
 };
 
-const BestSellerRow = ({ 
-  title, 
-  description, 
-  image, 
-  price, 
-  salesCount, 
-  revenue 
+const BestSellerRow = ({
+  title,
+  image,
+  price,
+  salesCount,
+  revenue
 }: any) => (
-  <div className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
+  <div className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors">
     <div className="relative w-14 h-14 flex-shrink-0">
       <SafeImage
         src={image}
@@ -800,9 +666,13 @@ const BestSellerRow = ({
     <div className="flex-1 min-w-0">
       <div className="flex justify-between items-start">
         <h4 className="font-medium text-gray-900 truncate text-base">{title}</h4>
-        <span className="text-base font-semibold text-green-600 ml-2">${price}</span>
+        <span className="text-sm font-semibold text-green-600 ml-2">${price}</span>
       </div>
-    
+      <div className="flex items-center gap-2 mt-1">
+        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{salesCount} sold</span>
+        <span className="text-xs text-gray-400">·</span>
+        <span className="text-xs text-gray-500">${(revenue || 0).toFixed(2)} revenue</span>
+      </div>
     </div>
   </div>
 );

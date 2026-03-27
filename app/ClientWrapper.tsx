@@ -31,7 +31,17 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
   }, [router, pathname]);
 
   if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-manrope">
+        <div className="text-center">
+          <div className="relative w-14 h-14 mx-auto mb-4">
+            <div className="absolute inset-0 rounded-full border-4 border-[#e6d281]/30" />
+            <div className="absolute inset-0 rounded-full border-4 border-t-[#e6d281] border-r-transparent border-b-transparent border-l-transparent animate-spin" />
+          </div>
+          <p className="text-sm text-gray-500 font-medium">Loading dashboard...</p>
+        </div>
+      </div>
+    );
   }
 
   // If we're on the auth page, render children without dashboard layout
@@ -41,7 +51,6 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
 
   // If no session and not on auth page, redirect to auth
   if (!session) {
-    router.push("/auth");
     return null;
   }
 

@@ -7,9 +7,10 @@ const Topbar: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [userInfo, setUserInfo] = useState<{ email?: string; username?: string } | null>(null);
 
   // Initialize search query from URL params
   useEffect(() => {
@@ -17,14 +18,22 @@ const Topbar: React.FC = () => {
     setSearchQuery(query);
   }, [searchParams]);
 
+  // Load user info from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('userData');
+      if (raw) setUserInfo(JSON.parse(raw));
+    } catch {}
+  }, []);
+
   // Debounced search function
   const debouncedSearch = useCallback(
     (() => {
       let timeoutId: NodeJS.Timeout;
-      
+
       return (query: string) => {
         clearTimeout(timeoutId);
-        
+
         if (query.trim()) {
           setIsSearching(true);
           timeoutId = setTimeout(() => {
@@ -32,9 +41,8 @@ const Topbar: React.FC = () => {
             params.set('q', query.trim());
             router.push(`${pathname}?${params.toString()}`);
             setIsSearching(false);
-          }, 500); // 500ms delay
+          }, 500);
         } else {
-          // If query is empty, remove search param
           const params = new URLSearchParams(searchParams.toString());
           params.delete('q');
           router.push(`${pathname}?${params.toString()}`);
@@ -78,8 +86,12 @@ const Topbar: React.FC = () => {
     }
   };
 
+  const displayName = userInfo?.username || userInfo?.email?.split('@')[0] || 'Admin';
+  const avatarInitial = displayName[0].toUpperCase();
+
   return (
-    <header className="bg-white w-full px-6 py-4 flex items-center justify-between shadow-sm font-manrope">
+    <header className="bg-white w-full px-6 py-3 flex items-center justify-between shadow-sm font-manrope border-b border-gray-100">
+      {/* Search bar */}
       <div className="relative w-full max-w-sm">
         <span className="absolute inset-y-0 left-3 flex items-center text-gray-400">
           <Search className="w-4 h-4" />
@@ -91,15 +103,13 @@ const Topbar: React.FC = () => {
           onChange={handleSearchChange}
           className="w-full pl-10 pr-10 py-2 rounded-lg bg-gray-100 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#e6d281] focus:bg-white transition-all duration-200"
         />
-        
-        {/* Loading indicator */}
+
         {isSearching && (
           <div className="absolute inset-y-0 right-10 flex items-center">
             <div className="w-4 h-4 border-2 border-[#e6d281] border-t-transparent rounded-full animate-spin"></div>
           </div>
         )}
-        
-        {/* Clear search button */}
+
         {searchQuery && (
           <button
             onClick={clearSearch}
@@ -110,15 +120,34 @@ const Topbar: React.FC = () => {
         )}
       </div>
 
-      {/* Search results info */}
-      {searchQuery && (
-        <div className="hidden sm:flex items-center text-sm text-gray-600">
-          <span className="bg-[#e6d281] bg-opacity-20 px-3 py-1 rounded-full">
-            Searching {getSearchContext()} for "{searchQuery}"
+      {/* Right side: search context + notifications + user */}
+      <div className="flex items-center gap-3 ml-4">
+        {searchQuery && (
+          <div className="hidden sm:flex items-center text-sm text-gray-600">
+            <span className="bg-[#e6d281]/20 px-3 py-1 rounded-full text-xs">
+              Searching {getSearchContext()} for &ldquo;{searchQuery}&rdquo;
+            </span>
+          </div>
+        )}
+
+        {/* Notifications */}
+        <button className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors relative">
+          <Bell className="w-5 h-5" />
+        </button>
+
+        {/* Divider */}
+        <div className="w-px h-6 bg-gray-200" />
+
+        {/* User avatar + name */}
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-[#e6d281] flex items-center justify-center text-sm font-bold text-gray-900 flex-shrink-0">
+            {avatarInitial}
+          </div>
+          <span className="hidden md:block text-sm text-gray-700 font-medium max-w-[120px] truncate">
+            {displayName}
           </span>
         </div>
-      )}
-
+      </div>
     </header>
   );
 };
