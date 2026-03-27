@@ -90,6 +90,7 @@ const Page = () => {
     // const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
     const apiUrl = "all-about-eggs-git-feature-preset-minting-toomedias-projects.vercel.app"
     const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
+    console.log("🚀 ~ handleAutoGenerate ~ adminKey:", adminKey)
     if (!apiUrl || !adminKey) { setGenResult({ success: false, message: 'API not configured.' }); return; }
     setAutoGenerating(true); setGenResult(null);
     try {
