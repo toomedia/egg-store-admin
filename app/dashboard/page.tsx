@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   TrendingUp,
   DollarSign,
+  User,
   Users,
   RefreshCw,
   ChevronDown,
