@@ -161,14 +161,14 @@ const SafeImage = ({ src, alt, className }: { src: string; alt: string; classNam
 
 const StatusBadge = ({ status }: { status: string }) => {
   const map: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
-    approved: { label: 'Live', icon: <CheckCircle size={9} />, cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
-    pending_approval: { label: 'Pending', icon: <Clock size={9} />, cls: 'bg-amber-50 text-amber-900 border-amber-200' },
-    rejected: { label: 'Rejected', icon: <XCircle size={9} />, cls: 'bg-red-50 text-red-800 border-red-200' },
+    approved: { label: 'Live', icon: <CheckCircle size={12} className="shrink-0" />, cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+    pending_approval: { label: 'Pending', icon: <Clock size={12} className="shrink-0" />, cls: 'bg-amber-50 text-amber-900 border-amber-200' },
+    rejected: { label: 'Rejected', icon: <XCircle size={12} className="shrink-0" />, cls: 'bg-red-50 text-red-800 border-red-200' },
   };
   const c = map[status];
   if (!c) return null;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider border ${c.cls}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider border ${c.cls}`}>
       {c.icon}
       {c.label}
     </span>
@@ -1334,12 +1334,12 @@ const Page = () => {
         presetName={rejectionModal.presetName}
       />
 
-      <div className="max-w-5xl mx-auto px-6 py-10">
-        <div className="flex items-end justify-between mb-10 flex-wrap gap-4">
+      <div className="max-w-6xl mx-auto px-5 sm:px-8 py-10 md:py-12">
+        <div className="flex items-end justify-between mb-10 flex-wrap gap-6">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
             <h1 className="serif text-5xl leading-none text-gray-900">Preset requests</h1>
-            <p className="text-sm text-gray-600 mt-3 max-w-lg">Pending submissions. Approve with a German title or reject with a reason.</p>
+            <p className="text-base text-gray-600 mt-4 max-w-xl leading-relaxed">Pending submissions. Approve with a German title or reject with a reason.</p>
           </div>
           <button
             type="button"
@@ -1350,18 +1350,18 @@ const Page = () => {
           </button>
         </div>
 
-        <div className="flex gap-8 mb-8 pb-8 border-b border-gray-200 flex-wrap items-end">
+        <div className="flex gap-10 md:gap-14 mb-10 pb-10 border-b border-gray-200 flex-wrap items-end">
           <div>
-            <p className="text-3xl font-light">{pendingCount}</p>
-            <p className="text-[10px] uppercase tracking-widest text-gray-500 mt-0.5">Pending</p>
+            <p className="text-4xl font-light text-gray-900 tabular-nums">{pendingCount}</p>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mt-1">Pending</p>
           </div>
           <div>
-            <p className="text-3xl font-light">{filteredPreset.length}</p>
-            <p className="text-[10px] uppercase tracking-widest text-gray-500 mt-0.5">Shown</p>
+            <p className="text-4xl font-light text-gray-900 tabular-nums">{filteredPreset.length}</p>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 mt-1">Shown</p>
           </div>
           {searchQuery && (
             <div className="ml-auto">
-              <p className="text-sm text-gray-600">
+              <p className="text-base text-gray-600">
                 {filteredPreset.length} result{filteredPreset.length !== 1 ? 's' : ''} for{' '}
                 <span className="text-[#e6d281]">&quot;{searchQuery}&quot;</span>
               </p>
@@ -1370,58 +1370,75 @@ const Page = () => {
         </div>
 
         {filteredPreset.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-5 md:space-y-6">
             {filteredPreset.map((item, idx) => (
-              <div key={item.id} className="card fu p-4 flex flex-col gap-4" style={{ animationDelay: `${idx * 30}ms` }}>
-                <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                  <div className="flex gap-1.5 shrink-0 overflow-x-auto pb-1 sm:pb-0">
-                    {(item.preset_images || []).slice(0, 12).map((url, i) => (
-                      <div key={i} className="w-11 h-11 rounded-lg overflow-hidden bg-gray-100 shrink-0">
-                        <SafeImage src={url} alt="" className="w-full h-full" />
-                      </div>
-                    ))}
+              <div
+                key={item.id}
+                className="card fu rounded-2xl p-6 md:p-7 flex flex-col gap-5 shadow-sm"
+                style={{ animationDelay: `${idx * 30}ms` }}
+              >
+                <div className="flex flex-col xl:flex-row xl:items-start gap-6 xl:gap-8">
+                  {/* Thumbnails — 6 per row, max 2 rows (12), larger hit targets */}
+                  <div className="shrink-0 xl:w-[min(100%,22rem)]">
+                    <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2.5">Preview</p>
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2.5">
+                      {(item.preset_images || []).slice(0, 12).map((url, i) => (
+                        <div
+                          key={i}
+                          className="aspect-square rounded-xl overflow-hidden bg-gray-100 ring-1 ring-gray-100"
+                        >
+                          <SafeImage src={url} alt="" className="w-full h-full" />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <h2 className="text-sm font-medium truncate">{item.preset_name?.en_name || 'Untitled'}</h2>
+
+                  <div className="flex-1 min-w-0 flex flex-col gap-3">
+                    <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+                      <h2 className="text-lg md:text-xl font-semibold text-gray-900 leading-snug break-words">
+                        {item.preset_name?.en_name || 'Untitled'}
+                      </h2>
                       <StatusBadge status={item.preset_status || ''} />
                     </div>
-                    <p className="text-xs text-gray-600 truncate mb-2">{item.preset_name?.de_name || '—'}</p>
-                    <p className="text-xs text-gray-600 line-clamp-2 mb-2">{item.preset_desc?.en_desc || 'No description'}</p>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <Calendar size={10} />
+                    <p className="text-sm text-gray-600">{item.preset_name?.de_name || '—'}</p>
+                    <p className="text-sm text-gray-600 leading-relaxed line-clamp-3">
+                      {item.preset_desc?.en_desc || 'No description'}
+                    </p>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2.5 pt-3 mt-1 border-t border-gray-100 text-sm text-gray-600">
+                      <span className="inline-flex items-center gap-2">
+                        <Calendar size={16} className="text-gray-400 shrink-0" />
                         {new Date(item.created_at).toLocaleDateString()}
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Mail size={10} />
-                        {item.created_by ? userInfo[item.created_by]?.email || '…' : '—'}
+                      <span className="inline-flex items-center gap-2 min-w-0">
+                        <Mail size={16} className="text-gray-400 shrink-0" />
+                        <span className="truncate">
+                          {item.created_by ? userInfo[item.created_by]?.email || '…' : '—'}
+                        </span>
                       </span>
-                      <span className="text-[#e6d281]">€{item.preset_price || '0.00'}</span>
-                      <span>
-                        {item.preset_size_json?.value || '—'} cards
-                      </span>
+                      <span className="font-medium text-amber-900">€{item.preset_price || '0.00'}</span>
+                      <span>{item.preset_size_json?.value || '—'} cards</span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 shrink-0">
+
+                  <div className="flex flex-row flex-wrap xl:flex-col gap-2 shrink-0 xl:min-w-[10.5rem]">
                     {item.preset_status === 'pending_approval' && (
                       <>
                         <button
                           type="button"
                           onClick={() => openApprovalModal(item.id, item.preset_name?.en_name || 'Untitled')}
                           disabled={isLoading}
-                          className="px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-800 text-xs font-medium hover:bg-emerald-50 disabled:opacity-40 flex items-center gap-1"
+                          className="flex-1 xl:flex-none justify-center px-4 py-2.5 rounded-xl border border-emerald-200 text-emerald-900 text-sm font-medium bg-emerald-50/50 hover:bg-emerald-50 disabled:opacity-40 inline-flex items-center gap-2"
                         >
-                          <CheckCircle size={14} />
+                          <CheckCircle size={16} />
                           {isLoading ? '…' : 'Approve'}
                         </button>
                         <button
                           type="button"
                           onClick={() => openRejectionModal(item.id, item.preset_name?.en_name || 'Untitled')}
                           disabled={isLoading}
-                          className="px-3 py-1.5 rounded-lg border border-red-200 text-red-800 text-xs font-medium hover:bg-red-50 disabled:opacity-40 flex items-center gap-1"
+                          className="flex-1 xl:flex-none justify-center px-4 py-2.5 rounded-xl border border-red-200 text-red-900 text-sm font-medium bg-red-50/40 hover:bg-red-50 disabled:opacity-40 inline-flex items-center gap-2"
                         >
-                          <XCircle size={14} />
+                          <XCircle size={16} />
                           {isLoading ? '…' : 'Reject'}
                         </button>
                       </>
@@ -1429,22 +1446,24 @@ const Page = () => {
                     <button
                       type="button"
                       onClick={() => handleEdit(item.id)}
-                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs hover:text-amber-900 hover:border-[#e6d281]/30 flex items-center gap-1"
+                      className="flex-1 xl:flex-none justify-center px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 hover:border-gray-300 inline-flex items-center gap-2"
                     >
-                      <Edit size={14} />
+                      <Edit size={16} />
                       Edit
                     </button>
                   </div>
                 </div>
 
                 {item.admin_notes && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-                    <span className="text-[10px] uppercase tracking-wider text-amber-800">Note</span> {item.admin_notes}
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 leading-relaxed">
+                    <span className="text-[10px] uppercase tracking-wider text-amber-800 font-semibold">Note</span>
+                    <span className="block mt-1">{item.admin_notes}</span>
                   </div>
                 )}
                 {item.rejection_reason && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
-                    <span className="text-[10px] uppercase tracking-wider text-red-700">Rejected</span> {item.rejection_reason}
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 leading-relaxed">
+                    <span className="text-[10px] uppercase tracking-wider text-red-700 font-semibold">Rejected</span>
+                    <span className="block mt-1">{item.rejection_reason}</span>
                   </div>
                 )}
               </div>
