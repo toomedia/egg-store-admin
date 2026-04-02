@@ -57,6 +57,9 @@ interface Preset {
   rejection_reason?: string;
   approved_at?: string;
   approved_by?: string;
+  concept?: string;
+  egg_prompts?: string[];
+  owned_by?: string;
 }
 
 interface FormData {
@@ -469,6 +472,40 @@ const Page = () => {
     presetId: '',
     presetName: ''
   });
+
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+
+  const handleRegenerate = async (presetId: string, presetName: string) => {
+    const env = (globalThis as any).process?.env ?? {};
+    const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
+    const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
+    if (!apiUrl || !adminKey) {
+      alert('Regeneration API not configured. Check NEXT_PUBLIC_AUTO_GENERATE_API_URL and NEXT_PUBLIC_ADMIN_SECRET_KEY.');
+      return;
+    }
+    if (!confirm(`Regenerate a new version of "${presetName}"? This will use OpenAI credits and create a new pending preset for review.`)) return;
+
+    setRegeneratingId(presetId);
+    try {
+      const res = await fetch(`${apiUrl}/api/regenerate-preset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+        body: JSON.stringify({ preset_id: presetId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Regeneration failed. Check if this preset has saved prompts.');
+      } else {
+        alert(`New version "${data.name}" created with ${data.imageCount} eggs. Check Pending Approvals.`);
+        const { data: updatedData } = await supabase.from('presets').select('*').order('created_at', { ascending: false });
+        if (updatedData) setPreset(updatedData);
+      }
+    } catch (e: any) {
+      alert(e.message || 'Regeneration failed.');
+    } finally {
+      setRegeneratingId(null);
+    }
+  };
 
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -1579,6 +1616,17 @@ const Page = () => {
                           {isLoading ? '…' : 'Reject'}
                         </button>
                       </>
+                    )}
+                    {item.owned_by && (
+                      <button
+                        type="button"
+                        onClick={() => handleRegenerate(item.id, item.preset_name?.en_name || 'Untitled')}
+                        disabled={regeneratingId === item.id}
+                        className="flex-1 xl:flex-none justify-center px-4 py-2.5 rounded-xl border border-purple-200 text-purple-900 text-sm font-medium bg-purple-50/50 hover:bg-purple-50 disabled:opacity-40 inline-flex items-center gap-2"
+                      >
+                        <Loader2 className={regeneratingId === item.id ? 'animate-spin' : ''} size={16} />
+                        {regeneratingId === item.id ? 'Regenerating…' : 'Regenerate new version'}
+                      </button>
                     )}
                     <button
                       type="button"

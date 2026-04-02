@@ -201,6 +201,15 @@ const OrdersPage = () => {
     return design?.preset_name?.en_name || design?.name || "Untitled";
   };
 
+  const getCategory = (design: any) => {
+    return (
+      design?.preset_name?.en_category ||
+      design?.preset_name?.category ||
+      design?.category ||
+      "—"
+    );
+  };
+
   const errBanner = error && (
     <div className="mb-6 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-300 flex justify-between items-center gap-3">
       <span>{error}</span>
@@ -249,15 +258,56 @@ const OrdersPage = () => {
               </div>
             </div>
 
-            {designs.length > 0 && (
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Items</p>
-                <p className="text-sm font-medium">{getName(designs[0])}</p>
-                <p className="text-xs text-gray-600 mt-1">
-                  Quantity {designs.reduce((sum, d) => sum + (d?.quantity || 1), 0)}
-                </p>
+          <div className="p-6">
+            {/* Customer & Order Info Section */}
+            <section className="mb-8">
+              <h2 className="text-lg font-medium text-gray-800 mb-4">
+                Order Summary
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Customer Column */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">
+                    CUSTOMER
+                  </h3>
+                  <p className="text-gray-800">{user_info?.fullName}</p>
+                  <p className="text-gray-600 mt-1">{user_info?.email}</p>
+                </div>
+
+                {/* Payment Column */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">
+                    PAYMENT
+                  </h3>
+                  <p className="text-gray-800 font-medium">
+                    ${selectedOrder.total_amount ? (selectedOrder.total_amount / 100).toFixed(2) : selectedOrder.total || "0.00"}
+                  </p>
+                  <p className="text-gray-600 mt-1">
+                    {selectedOrder.payment_method || "Credit Card"}
+                  </p>
+                </div>
               </div>
-            )}
+            </section>
+
+            {/* Order Items Section */}
+            <section>
+              <h2 className="text-lg font-medium text-gray-800 mb-4">
+                {designs.length} {designs.length === 1 ? "Item" : "Items"}{" "}
+                Purchased
+              </h2>
+
+              {/* Product Name and Category (shown once) */}
+              {designs.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="font-medium text-gray-800">
+                    {getName(designs[0])}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {getCategory(designs[0])}
+                  </p>
+                </div>
+              )}
 
             <div>
               <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-3">Preview</p>
@@ -280,6 +330,8 @@ const OrdersPage = () => {
                 ))}
               </div>
             </div>
+            </section>
+          </div>
           </div>
         </div>
       </div>

@@ -6,7 +6,7 @@ import { supabase } from "../../../utils/supabaseClient";
 import {
   ArrowLeft, PlusCircle, Image as ImageIcon, Calendar,
   Edit, Trash2, X, CheckCircle, XCircle, Clock,
-  Loader2, Sparkles,
+  Loader2, Sparkles, RefreshCw,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -81,9 +81,35 @@ const Page = () => {
   const [autoGenerating, setAutoGenerating] = useState(false);
   const [genForm, setGenForm] = useState({ concept: '', name: '' });
   const [genResult, setGenResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ success: boolean; message: string } | null>(null);
   const [formData, setFormData] = useState<FormData>({ titleEn: '', descEn: '', size: { value: '', price: 0 }, price: '', images: [] });
 
   const sizes = [{ value: 24, price: 0.99 }];
+
+  const handleBackfill = async () => {
+    const env = (globalThis as any).process?.env ?? {};
+    const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
+    const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
+    if (!apiUrl || !adminKey) { setBackfillResult({ success: false, message: 'API not configured.' }); return; }
+    if (!confirm('This will scan existing presets missing prompts and use GPT-4o Vision to reverse-engineer them. Uses OpenAI credits. Continue?')) return;
+    setBackfilling(true); setBackfillResult(null);
+    try {
+      const res = await fetch(`${apiUrl}/api/backfill-preset-prompts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setBackfillResult({ success: false, message: data.error || 'Backfill failed.' });
+      } else if (data.processed === 0) {
+        setBackfillResult({ success: true, message: 'All presets already have prompts saved. Nothing to backfill.' });
+      } else {
+        setBackfillResult({ success: true, message: `Done. ${data.succeeded}/${data.processed} presets updated. ${data.failed > 0 ? `${data.failed} failed.` : ''}` });
+      }
+    } catch (e: any) { setBackfillResult({ success: false, message: e.message }); }
+    finally { setBackfilling(false); }
+  };
 
   const handleAutoGenerate = async () => {
     const env = (globalThis as any).process?.env ?? {};
@@ -269,14 +295,25 @@ const Page = () => {
           </div>
           <div className="flex gap-2">
             <button onClick={() => { setShowGenModal(true); setGenResult(null); }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:text-[#e6d281] hover:border-[#e6d281]/20 transition-all text-sm">
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#1e1e1e] text-[#555] hover:text-[#e6d281] hover:border-[#e6d281]/20 transition-all text-sm">
               <Sparkles size={14} /> Generate
             </button>
+            <button onClick={handleBackfill} disabled={backfilling}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#1e1e1e] text-[#555] hover:text-purple-400 hover:border-purple-400/20 transition-all text-sm disabled:opacity-30"
+                title="Scan presets missing prompts and reverse-engineer them via GPT-4o Vision">
+                {backfilling ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                {backfilling ? 'Backfilling…' : 'Backfill Prompts'}
+              </button>
             <button onClick={() => setCurrentView('create')}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e6d281] text-[#0a0a0a] font-medium text-sm hover:bg-[#f0dc8a] transition-all">
               <PlusCircle size={14} /> New Preset
             </button>
           </div>
+          {backfillResult && (
+              <p className={`text-xs ${backfillResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                {backfillResult.message}
+              </p>
+            )}
         </div>
 
         {/* Stats */}

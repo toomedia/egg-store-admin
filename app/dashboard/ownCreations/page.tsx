@@ -518,7 +518,7 @@ const OwnCreations = () => {
               
               if (imageUrl && typeof imageUrl === 'string' && !seenImageUrls.has(imageUrl)) {
                 seenImageUrls.add(imageUrl);
-                const creationId = `${userId}-generated_images-${index}-${Date.now()}`;
+                const creationId = `${userId}-${imageUrl.split('/').pop()?.split('?')[0] || index}`;
                           
                 collectedCreations.push({
                   id: creationId,
