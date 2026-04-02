@@ -102,8 +102,6 @@ const Page = () => {
     const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
     const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
 
-    console.log("🚀 ~ handleBackfill ~ adminKey:", adminKey)
-    console.log("🚀 ~ handleBackfill ~ apiUrl:", apiUrl)
     if (!apiUrl || !adminKey) {
       const msg = 'API not configured.';
       if (presetId) setBackfillRowFeedback({ id: presetId, success: false, message: msg });
@@ -177,7 +175,7 @@ const Page = () => {
     // const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
     const apiUrl = "https://all-about-eggs-git-feature-preset-minting-toomedias-projects.vercel.app"
    const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
-    console.log("🚀 ~ handleAutoGenerate ~ adminKey:", adminKey)
+
     if (!apiUrl || !adminKey) { setGenResult({ success: false, message: 'API not configured.' }); return; }
     setAutoGenerating(true); setGenResult(null);
     try {
