@@ -87,8 +87,6 @@ const Page = () => {
 
   const sizes = [{ value: 24, price: 0.99 }];
 
-
-
   const handleBackfill = async () => {
     const env = (globalThis as any).process?.env ?? {};
     const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
