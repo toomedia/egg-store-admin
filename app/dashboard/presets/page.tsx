@@ -81,34 +81,92 @@ const Page = () => {
   const [autoGenerating, setAutoGenerating] = useState(false);
   const [genForm, setGenForm] = useState({ concept: '', name: '' });
   const [genResult, setGenResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [backfilling, setBackfilling] = useState(false);
+  /** `all` = page-wide scan; preset id = single preset backfill */
+  const [backfillBusy, setBackfillBusy] = useState<'all' | string | null>(null);
   const [backfillResult, setBackfillResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [backfillRowFeedback, setBackfillRowFeedback] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [formData, setFormData] = useState<FormData>({ titleEn: '', descEn: '', size: { value: '', price: 0 }, price: '', images: [] });
 
   const sizes = [{ value: 24, price: 0.99 }];
 
-  const handleBackfill = async () => {
+  /**
+   * Calls `POST /api/backfill-preset-prompts` on the auto-generate service.
+   * - No args: body `{}` — server scans all presets missing prompts (bulk).
+   * - `{ presetId }`: body `{ presetId }` — server should only process that preset.
+   *   (Your API must implement the optional `presetId` field; otherwise it behaves like bulk.)
+   */
+  const handleBackfill = async (opts?: { presetId?: string; presetName?: string }) => {
+    const presetId = opts?.presetId;
+    const label = opts?.presetName?.trim() || 'this preset';
     const env = (globalThis as any).process?.env ?? {};
     const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
     const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
-    if (!apiUrl || !adminKey) { setBackfillResult({ success: false, message: 'API not configured.' }); return; }
-    if (!confirm('This will scan existing presets missing prompts and use GPT-4o Vision to reverse-engineer them. Uses OpenAI credits. Continue?')) return;
-    setBackfilling(true); setBackfillResult(null);
+    if (!apiUrl || !adminKey) {
+      const msg = 'API not configured.';
+      if (presetId) setBackfillRowFeedback({ id: presetId, success: false, message: msg });
+      else setBackfillResult({ success: false, message: msg });
+      return;
+    }
+    if (!presetId) {
+      if (!confirm('This will scan existing presets missing prompts and use GPT-4o Vision to reverse-engineer them. Uses OpenAI credits. Continue?')) return;
+    } else {
+      if (!confirm(`Backfill vision prompts for “${label}”? Uses OpenAI credits.`)) return;
+    }
+    if (presetId) setBackfillResult(null);
+    else setBackfillRowFeedback(null);
+    setBackfillBusy(presetId ?? 'all');
     try {
       const res = await fetch(`${apiUrl}/api/backfill-preset-prompts`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({}),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+        body: JSON.stringify(presetId ? { presetId } : {}),
       });
       const data = await res.json();
+      const errMsg = data.error || 'Backfill failed.';
       if (!res.ok || !data.success) {
-        setBackfillResult({ success: false, message: data.error || 'Backfill failed.' });
-      } else if (data.processed === 0) {
-        setBackfillResult({ success: true, message: 'All presets already have prompts saved. Nothing to backfill.' });
-      } else {
-        setBackfillResult({ success: true, message: `Done. ${data.succeeded}/${data.processed} presets updated. ${data.failed > 0 ? `${data.failed} failed.` : ''}` });
+        if (presetId) setBackfillRowFeedback({ id: presetId, success: false, message: errMsg });
+        else setBackfillResult({ success: false, message: errMsg });
+        return;
       }
-    } catch (e: any) { setBackfillResult({ success: false, message: e.message }); }
-    finally { setBackfilling(false); }
+      if (data.processed === 0) {
+        if (presetId) {
+          setBackfillRowFeedback({
+            id: presetId,
+            success: true,
+            message: 'Already has prompts saved — nothing to backfill.',
+          });
+        } else {
+          setBackfillResult({
+            success: true,
+            message: 'All presets already have prompts saved. Nothing to backfill.',
+          });
+        }
+        return;
+      }
+      if (presetId) {
+        const ok = data.succeeded >= 1 || data.processed >= 1;
+        setBackfillRowFeedback({
+          id: presetId,
+          success: ok,
+          message: ok
+            ? `Prompts updated for “${label}”.`
+            : data.failed > 0
+              ? `Could not complete (${data.failed} failed).`
+              : errMsg,
+        });
+      } else {
+        setBackfillResult({
+          success: true,
+          message: `Done. ${data.succeeded}/${data.processed} presets updated.${data.failed > 0 ? ` ${data.failed} failed.` : ''}`,
+        });
+      }
+    } catch (e: any) {
+      const msg = e.message ?? 'Request failed';
+      if (presetId) setBackfillRowFeedback({ id: presetId, success: false, message: msg });
+      else setBackfillResult({ success: false, message: msg });
+    } finally {
+      setBackfillBusy(null);
+    }
   };
 
   const handleAutoGenerate = async () => {
@@ -298,12 +356,16 @@ const Page = () => {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#1e1e1e] text-[#555] hover:text-[#e6d281] hover:border-[#e6d281]/20 transition-all text-sm">
               <Sparkles size={14} /> Generate
             </button>
-            <button onClick={handleBackfill} disabled={backfilling}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#1e1e1e] text-[#555] hover:text-purple-400 hover:border-purple-400/20 transition-all text-sm disabled:opacity-30"
-                title="Scan presets missing prompts and reverse-engineer them via GPT-4o Vision">
-                {backfilling ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                {backfilling ? 'Backfilling…' : 'Backfill Prompts'}
-              </button>
+            <button
+              type="button"
+              onClick={() => handleBackfill()}
+              disabled={backfillBusy !== null}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#1e1e1e] text-[#555] hover:text-purple-400 hover:border-purple-400/20 transition-all text-sm disabled:opacity-30"
+              title="Scan presets missing prompts and reverse-engineer them via GPT-4o Vision"
+            >
+              {backfillBusy === 'all' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {backfillBusy === 'all' ? 'Backfilling…' : 'Backfill Prompts'}
+            </button>
             <button onClick={() => setCurrentView('create')}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e6d281] text-[#0a0a0a] font-medium text-sm hover:bg-[#f0dc8a] transition-all">
               <PlusCircle size={14} /> New Preset
@@ -360,13 +422,40 @@ const Page = () => {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-1 shrink-0">
-                  <button onClick={() => handleEdit(item.id)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-all">
-                    <Edit size={14} />
-                  </button>
-                  <button onClick={() => handleDelete(item.id)} disabled={deletingId === item.id} className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all disabled:opacity-30">
-                    {deletingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  </button>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleBackfill({
+                          presetId: item.id,
+                          presetName: item.preset_name?.en_name || undefined,
+                        })
+                      }
+                      disabled={backfillBusy !== null}
+                      title="Backfill vision prompts for this preset only"
+                      className="p-2 rounded-lg text-gray-500 hover:text-purple-500 hover:bg-purple-500/5 transition-all disabled:opacity-30"
+                    >
+                      {backfillBusy === item.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <RefreshCw size={14} />
+                      )}
+                    </button>
+                    <button type="button" onClick={() => handleEdit(item.id)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-all">
+                      <Edit size={14} />
+                    </button>
+                    <button type="button" onClick={() => handleDelete(item.id)} disabled={deletingId === item.id} className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all disabled:opacity-30">
+                      {deletingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    </button>
+                  </div>
+                  {backfillRowFeedback?.id === item.id && (
+                    <p
+                      className={`max-w-[14rem] text-right text-[11px] leading-snug ${backfillRowFeedback.success ? 'text-emerald-600' : 'text-red-600'}`}
+                    >
+                      {backfillRowFeedback.message}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
