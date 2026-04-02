@@ -51,6 +51,7 @@ const AdminManager = () => {
   const [inviteRole, setInviteRole] = useState('admin');
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  const deleteUserApiBaseUrl = 'https://egg-store-admin.vercel.app'
   
   const itemsPerPage = 10;
   const roles = ['admin'];
@@ -281,29 +282,32 @@ const AdminManager = () => {
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
+  const handleDeleteUser = async (userId: string, email?: string) => {
     if (!confirm('Are you sure you want to delete this user?')) {
       return;
     }
     
     try {
-      // Use admin client to delete from users table directly (bypasses RLS)
-      const { error } = await supabaseAdmin
-        .from('users')
-        .delete()
-        .eq('id', userId);
+      const response = await fetch(`${deleteUserApiBaseUrl}/api/deleteuser`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId, email }),
+      });
 
-      if (error) {
-        showNotification('error', `Failed to delete user: ${error.message}`);
-        throw new Error(error.message);
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Failed to delete user');
       }
 
       showNotification('success', 'User deleted successfully');
       
       setUsers(prev => prev.filter(user => user.id !== userId));
       setSelectedUsers(prev => prev.filter(id => id !== userId));
-    } catch (error) {
-      showNotification('error', 'Failed to delete user');
+    } catch (error: any) {
+      showNotification('error', error.message || 'Failed to delete user');
     }
   };
 
@@ -318,10 +322,20 @@ const AdminManager = () => {
       
       for (const userId of selectedUsers) {
         try {
-          await supabase
-            .from('users')
-            .delete()
-            .eq('id', userId);
+          const selectedUser = users.find((user) => user.id === userId);
+          const response = await fetch(`${deleteUserApiBaseUrl}/api/deleteuser`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ userId, email: selectedUser?.email }),
+          });
+
+          const result = await response.json();
+
+          if (!response.ok || !result.success) {
+            throw new Error(result.message || 'Failed to delete user');
+          }
           
           successCount++;
         } catch (error) {
@@ -796,7 +810,7 @@ const AdminManager = () => {
                         <div className="flex justify-end items-center space-x-2">
                           <button
                             className="text-gray-600 hover:text-red-500 p-1"
-                            onClick={() => handleDeleteUser(user.id)}
+                            onClick={() => handleDeleteUser(user.id, user.email)}
                           >
                             <Trash2 size={16} />
                           </button>
