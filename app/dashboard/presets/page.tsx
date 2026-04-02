@@ -454,7 +454,7 @@ const Page = () => {
                         title="Sold out — regenerate a new version"
                         className="p-2 rounded-lg text-gray-500 hover:text-orange-500 hover:bg-orange-500/5 transition-all disabled:opacity-30"
                       >
-                        {regeneratingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                        {regeneratingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Regenerate new version
                       </button>
                     )}
                     <button
@@ -464,7 +464,7 @@ const Page = () => {
                       title="Backfill vision prompts for this preset only"
                       className="p-2 rounded-lg text-gray-500 hover:text-purple-500 hover:bg-purple-500/5 transition-all disabled:opacity-30"
                     >
-                      {backfillBusy === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                      {backfillBusy === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Backfill Prompts
                     </button>
                     <button type="button" onClick={() => handleEdit(item.id)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-all">
                       <Edit size={14} />
