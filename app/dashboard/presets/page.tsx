@@ -452,7 +452,7 @@ const Page = () => {
                         onClick={() => handleRegenerate(item.id, item.preset_name?.en_name || 'Untitled')}
                         disabled={regeneratingId === item.id}
                         title="Sold out — regenerate a new version"
-                        className="p-2 rounded-lg text-gray-500 hover:text-orange-500 hover:bg-orange-500/5 transition-all disabled:opacity-30"
+                        className="p-2 text-[9px] rounded-lg text-gray-500 hover:text-orange-500 hover:bg-orange-500/5 transition-all disabled:opacity-30"
                       >
                         {regeneratingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Regenerate new version
                       </button>
@@ -462,7 +462,7 @@ const Page = () => {
                       onClick={() => handleBackfill({ presetId: item.id, presetName: item.preset_name?.en_name || undefined })}
                       disabled={backfillBusy !== null}
                       title="Backfill vision prompts for this preset only"
-                      className="p-2 rounded-lg text-gray-500 hover:text-purple-500 hover:bg-purple-500/5 transition-all disabled:opacity-30"
+                      className="p-2 text-[9px] rounded-lg text-gray-500 hover:text-purple-500 hover:bg-purple-500/5 transition-all disabled:opacity-30"
                     >
                       {backfillBusy === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Backfill Prompts
                     </button>
