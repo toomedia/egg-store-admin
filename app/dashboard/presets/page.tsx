@@ -95,9 +95,8 @@ const Page = () => {
 
 
   const handleRegenerate = async (presetId: string, presetName: string) => {
-    const env = (globalThis as any).process?.env ?? {};
-    const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
-    const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
+    const apiUrl = "https://all-about-eggs-git-feature-preset-minting-toomedias-projects.vercel.app";
+    const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
     if (!apiUrl || !adminKey) { alert('Regeneration API not configured.'); return; }
     if (!confirm(`Regenerate a new version of "${presetName}"? This uses OpenAI credits and creates a new preset for review.`)) return;
     setRegeneratingId(presetId);
