@@ -396,7 +396,6 @@ const ImageLightboxModal = ({
       >
         <X size={24} />
       </button>
-
       {showNav && (
         <>
           <button
