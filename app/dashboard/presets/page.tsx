@@ -23,6 +23,9 @@ interface Preset {
   created_at: string; created_by: string;
   preset_status?: 'draft' | 'pending_approval' | 'approved' | 'rejected';
   admin_notes?: string; approved_at?: string;
+  owned_by?: string;
+  concept?: string;
+  egg_prompts?: string[];
 }
 interface FormData {
   titleEn: string; descEn: string; size: PresetSize; price: string; images: PresetImage[];
@@ -85,15 +88,35 @@ const Page = () => {
   const [backfillBusy, setBackfillBusy] = useState<'all' | string | null>(null);
   const [backfillResult, setBackfillResult] = useState<{ success: boolean; message: string } | null>(null);
   const [backfillRowFeedback, setBackfillRowFeedback] = useState<{ id: string; success: boolean; message: string } | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({ titleEn: '', descEn: '', size: { value: '', price: 0 }, price: '', images: [] });
 
   const sizes = [{ value: 24, price: 0.99 }];
+
+
+  const handleRegenerate = async (presetId: string, presetName: string) => {
+    const env = (globalThis as any).process?.env ?? {};
+    const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
+    const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
+    if (!apiUrl || !adminKey) { alert('Regeneration API not configured.'); return; }
+    if (!confirm(`Regenerate a new version of "${presetName}"? This uses OpenAI credits and creates a new preset for review.`)) return;
+    setRegeneratingId(presetId);
+    try {
+      const res = await fetch(`${apiUrl}/api/regenerate-preset`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+        body: JSON.stringify({ preset_id: presetId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) alert(data.error || 'Regeneration failed. Make sure this preset has saved prompts (run Backfill first).');
+      else alert(`New version "${data.name}" created with ${data.imageCount} eggs. Check Preset Requests for review.`);
+    } catch (e: any) { alert(e.message || 'Regeneration failed.'); }
+    finally { setRegeneratingId(null); }
+  };
 
   /**
    * Calls `POST /api/backfill-preset-prompts` on the auto-generate service.
    * - No args: body `{}` — server scans all presets missing prompts (bulk).
    * - `{ presetId }`: body `{ presetId }` — server should only process that preset.
-   *   (Your API must implement the optional `presetId` field; otherwise it behaves like bulk.)
    */
   const handleBackfill = async (opts?: { presetId?: string; presetName?: string }) => {
     const presetId = opts?.presetId;
@@ -172,9 +195,8 @@ const Page = () => {
 
   const handleAutoGenerate = async () => {
     const env = (globalThis as any).process?.env ?? {};
-    // const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
-    const apiUrl = "https://all-about-eggs-git-feature-preset-minting-toomedias-projects.vercel.app"
-   const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
+    const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
+    const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
 
     if (!apiUrl || !adminKey) { setGenResult({ success: false, message: 'API not configured.' }); return; }
     setAutoGenerating(true); setGenResult(null);
@@ -425,23 +447,25 @@ const Page = () => {
                 {/* Actions */}
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   <div className="flex gap-1">
+                    {item.owned_by && (
+                      <button
+                        type="button"
+                        onClick={() => handleRegenerate(item.id, item.preset_name?.en_name || 'Untitled')}
+                        disabled={regeneratingId === item.id}
+                        title="Sold out — regenerate a new version"
+                        className="p-2 rounded-lg text-gray-500 hover:text-orange-500 hover:bg-orange-500/5 transition-all disabled:opacity-30"
+                      >
+                        {regeneratingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() =>
-                        handleBackfill({
-                          presetId: item.id,
-                          presetName: item.preset_name?.en_name || undefined,
-                        })
-                      }
+                      onClick={() => handleBackfill({ presetId: item.id, presetName: item.preset_name?.en_name || undefined })}
                       disabled={backfillBusy !== null}
                       title="Backfill vision prompts for this preset only"
                       className="p-2 rounded-lg text-gray-500 hover:text-purple-500 hover:bg-purple-500/5 transition-all disabled:opacity-30"
                     >
-                      {backfillBusy === item.id ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <RefreshCw size={14} />
-                      )}
+                      {backfillBusy === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                     </button>
                     <button type="button" onClick={() => handleEdit(item.id)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-all">
                       <Edit size={14} />
@@ -451,9 +475,7 @@ const Page = () => {
                     </button>
                   </div>
                   {backfillRowFeedback?.id === item.id && (
-                    <p
-                      className={`max-w-[14rem] text-right text-[11px] leading-snug ${backfillRowFeedback.success ? 'text-emerald-600' : 'text-red-600'}`}
-                    >
+                    <p className={`max-w-[14rem] text-right text-[11px] leading-snug ${backfillRowFeedback.success ? 'text-emerald-600' : 'text-red-600'}`}>
                       {backfillRowFeedback.message}
                     </p>
                   )}
