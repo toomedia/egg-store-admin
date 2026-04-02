@@ -477,7 +477,7 @@ const Page = () => {
   const handleRegenerate = async (presetId: string, presetName: string) => {
     const env = (globalThis as any).process?.env ?? {};
     const apiUrl = "https://all-about-eggs-git-feature-preset-minting-toomedias-projects.vercel.app"
-    const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
+    const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
     if (!apiUrl || !adminKey) {
       alert('Regeneration API not configured. Check NEXT_PUBLIC_AUTO_GENERATE_API_URL and NEXT_PUBLIC_ADMIN_SECRET_KEY.');
       return;

@@ -99,8 +99,8 @@ const Page = () => {
     const presetId = opts?.presetId;
     const label = opts?.presetName?.trim() || 'this preset';
     const env = (globalThis as any).process?.env ?? {};
-    const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
-    const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
+    const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
+    const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
 
     console.log("🚀 ~ handleBackfill ~ adminKey:", adminKey)
     console.log("🚀 ~ handleBackfill ~ apiUrl:", apiUrl)
