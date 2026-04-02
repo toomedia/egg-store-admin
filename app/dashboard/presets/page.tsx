@@ -101,6 +101,9 @@ const Page = () => {
     const env = (globalThis as any).process?.env ?? {};
     const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
     const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
+
+    console.log("🚀 ~ handleBackfill ~ adminKey:", adminKey)
+    console.log("🚀 ~ handleBackfill ~ apiUrl:", apiUrl)
     if (!apiUrl || !adminKey) {
       const msg = 'API not configured.';
       if (presetId) setBackfillRowFeedback({ id: presetId, success: false, message: msg });
