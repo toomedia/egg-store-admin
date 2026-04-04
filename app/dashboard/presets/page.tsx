@@ -284,13 +284,6 @@ const Page = () => {
               <input required name="titleEn" value={formData.titleEn} onChange={e => setFormData(p => ({ ...p, titleEn: e.target.value }))}
                 placeholder="e.g. Tropical Birds" className="ifield" />
             </div>
-
-
-
-
-
-            
-
             <div>
               <label className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">
                 Images
