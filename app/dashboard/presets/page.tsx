@@ -249,7 +249,6 @@ const Page = () => {
       if (!error) setPreset(p => p.filter(i => i.id !== id));
     } finally { setDeletingId(null); }
   };
-
   const handleEdit = (id: string) => {
     const p = preset.find(i => i.id === id); if (!p) return;
     setFormData({ titleEn: p.preset_name?.en_name || '', descEn: p.preset_desc?.en_desc || '', size: p.preset_size_json || { value: '', price: 0 }, price: p.preset_price || '', images: (p.preset_images || []).map(url => ({ fileObject: null, previewUrl: url, isExisting: true, originalUrl: url, markedForDeletion: false })) });
