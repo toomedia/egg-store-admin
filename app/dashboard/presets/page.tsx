@@ -289,12 +289,14 @@ const Page = () => {
                 Images
                 {req > 0 && <span className={`ml-2 normal-case ${active.length === req ? 'text-emerald-400' : 'text-amber-400'}`}>{active.length}/{req}</span>}
               </label>
+
               <label htmlFor="fup" className={`flex flex-col items-center justify-center h-28 border-dashed border-2 rounded-xl cursor-pointer transition-all ${!formData.size.value ? 'border-gray-200 opacity-30 cursor-not-allowed' : 'border-gray-200 hover:border-[#e6d281]/40'}`}>
                 <ImageIcon size={20} className="text-gray-500 mb-1.5" />
                 <span className="text-xs text-gray-600">Upload images</span>
                 <input id="fup" type="file" className="sr-only" multiple disabled={!formData.size.value}
                   onChange={e => { if (e.target.files) setFormData(p => ({ ...p, images: [...p.images, ...Array.from(e.target.files!).map(f => ({ fileObject: f, previewUrl: URL.createObjectURL(f), isExisting: false, markedForDeletion: false }))] })); }} />
               </label>
+
               {formData.images.length > 0 && (
                 <div className="mt-3 grid grid-cols-6 gap-2">
                   {formData.images.map((img, i) => (
@@ -335,11 +337,13 @@ const Page = () => {
             <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
             <h1 className="serif text-5xl leading-none text-gray-900">Presets</h1>
           </div>
+          
           <div className="flex gap-2">
             <button onClick={() => { setShowGenModal(true); setGenResult(null); }}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#1e1e1e] text-[#555] hover:text-[#e6d281] hover:border-[#e6d281]/20 transition-all text-sm">
               <Sparkles size={14} /> Generate
             </button>
+
             <button onClick={() => setCurrentView('create')}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e6d281] text-[#0a0a0a] font-medium text-sm hover:bg-[#f0dc8a] transition-all">
               <PlusCircle size={14} /> New Preset
