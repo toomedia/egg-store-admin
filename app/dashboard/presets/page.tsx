@@ -84,9 +84,7 @@ const Page = () => {
   const [autoGenerating, setAutoGenerating] = useState(false);
   const [genForm, setGenForm] = useState({ concept: '', name: '' });
   const [genResult, setGenResult] = useState<{ success: boolean; message: string } | null>(null);
-  /** `all` = page-wide scan; preset id = single preset backfill */
-  const [backfillBusy, setBackfillBusy] = useState<'all' | string | null>(null);
-  const [backfillResult, setBackfillResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [backfillBusy, setBackfillBusy] = useState<string | null>(null);
   const [backfillRowFeedback, setBackfillRowFeedback] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({ titleEn: '', descEn: '', size: { value: '', price: 0 }, price: '', images: [] });
@@ -95,7 +93,7 @@ const Page = () => {
 
 
   const handleRegenerate = async (presetId: string, presetName: string) => {
-    const apiUrl = "https://all-about-eggs-git-feature-preset-minting-toomedias-projects.vercel.app";
+    const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
     const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
     if (!apiUrl || !adminKey) { alert('Regeneration API not configured.'); return; }
     if (!confirm(`Regenerate a new version of "${presetName}"? This uses OpenAI credits and creates a new preset for review.`)) return;
@@ -113,89 +111,58 @@ const Page = () => {
   };
 
   /**
-   * Calls `POST /api/backfill-preset-prompts` on the auto-generate service.
-   * - No args: body `{}` — server scans all presets missing prompts (bulk).
-   * - `{ presetId }`: body `{ presetId }` — server should only process that preset.
+   * Backfill vision prompts for a single preset via GPT-4o Vision.
    */
-  const handleBackfill = async (opts?: { presetId?: string; presetName?: string }) => {
-    const presetId = opts?.presetId;
-    const label = opts?.presetName?.trim() || 'this preset';
-    const env = (globalThis as any).process?.env ?? {};
+  const handleBackfill = async (opts: { presetId: string; presetName?: string }) => {
+    const { presetId } = opts;
+    const label = opts.presetName?.trim() || 'this preset';
     const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
     const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
 
     if (!apiUrl || !adminKey) {
-      const msg = 'API not configured.';
-      if (presetId) setBackfillRowFeedback({ id: presetId, success: false, message: msg });
-      else setBackfillResult({ success: false, message: msg });
+      setBackfillRowFeedback({ id: presetId, success: false, message: 'API not configured.' });
       return;
     }
-    if (!presetId) {
-      if (!confirm('This will scan existing presets missing prompts and use GPT-4o Vision to reverse-engineer them. Uses OpenAI credits. Continue?')) return;
-    } else {
-      if (!confirm(`Backfill vision prompts for “${label}”? Uses OpenAI credits.`)) return;
-    }
-    if (presetId) setBackfillResult(null);
-    else setBackfillRowFeedback(null);
-    setBackfillBusy(presetId ?? 'all');
+    if (!confirm(`Backfill vision prompts for “${label}”? Uses OpenAI credits.`)) return;
+
+    setBackfillRowFeedback(null);
+    setBackfillBusy(presetId);
     try {
       const res = await fetch(`${apiUrl}/api/backfill-preset-prompts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify(presetId ? { presetId } : {}),
+        body: JSON.stringify({ presetId }),
       });
       const data = await res.json();
       const errMsg = data.error || 'Backfill failed.';
       if (!res.ok || !data.success) {
-        if (presetId) setBackfillRowFeedback({ id: presetId, success: false, message: errMsg });
-        else setBackfillResult({ success: false, message: errMsg });
+        setBackfillRowFeedback({ id: presetId, success: false, message: errMsg });
         return;
       }
       if (data.processed === 0) {
-        if (presetId) {
-          setBackfillRowFeedback({
-            id: presetId,
-            success: true,
-            message: 'Already has prompts saved — nothing to backfill.',
-          });
-        } else {
-          setBackfillResult({
-            success: true,
-            message: 'All presets already have prompts saved. Nothing to backfill.',
-          });
-        }
+        setBackfillRowFeedback({ id: presetId, success: true, message: 'Already has prompts saved.' });
         return;
       }
-      if (presetId) {
-        const ok = data.succeeded >= 1 || data.processed >= 1;
-        setBackfillRowFeedback({
-          id: presetId,
-          success: ok,
-          message: ok
-            ? `Prompts updated for “${label}”.`
-            : data.failed > 0
-              ? `Could not complete (${data.failed} failed).`
-              : errMsg,
-        });
-      } else {
-        setBackfillResult({
-          success: true,
-          message: `Done. ${data.succeeded}/${data.processed} presets updated.${data.failed > 0 ? ` ${data.failed} failed.` : ''}`,
-        });
-      }
+      const ok = data.succeeded >= 1 || data.processed >= 1;
+      setBackfillRowFeedback({
+        id: presetId,
+        success: ok,
+        message: ok
+          ? `Prompts updated for “${label}”.`
+          : data.failed > 0
+            ? `Could not complete (${data.failed} failed).`
+            : errMsg,
+      });
     } catch (e: any) {
-      const msg = e.message ?? 'Request failed';
-      if (presetId) setBackfillRowFeedback({ id: presetId, success: false, message: msg });
-      else setBackfillResult({ success: false, message: msg });
+      setBackfillRowFeedback({ id: presetId, success: false, message: e.message ?? 'Request failed' });
     } finally {
       setBackfillBusy(null);
     }
   };
 
   const handleAutoGenerate = async () => {
-    const env = (globalThis as any).process?.env ?? {};
-    const apiUrl = env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
-    const adminKey = env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
+    const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
+    const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
 
     if (!apiUrl || !adminKey) { setGenResult({ success: false, message: 'API not configured.' }); return; }
     setAutoGenerating(true); setGenResult(null);
@@ -378,26 +345,11 @@ const Page = () => {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#1e1e1e] text-[#555] hover:text-[#e6d281] hover:border-[#e6d281]/20 transition-all text-sm">
               <Sparkles size={14} /> Generate
             </button>
-            <button
-              type="button"
-              onClick={() => handleBackfill()}
-              disabled={backfillBusy !== null}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#1e1e1e] text-[#555] hover:text-purple-400 hover:border-purple-400/20 transition-all text-sm disabled:opacity-30"
-              title="Scan presets missing prompts and reverse-engineer them via GPT-4o Vision"
-            >
-              {backfillBusy === 'all' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              {backfillBusy === 'all' ? 'Backfilling…' : 'Backfill Prompts'}
-            </button>
             <button onClick={() => setCurrentView('create')}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#e6d281] text-[#0a0a0a] font-medium text-sm hover:bg-[#f0dc8a] transition-all">
               <PlusCircle size={14} /> New Preset
             </button>
           </div>
-          {backfillResult && (
-              <p className={`text-xs ${backfillResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
-                {backfillResult.message}
-              </p>
-            )}
         </div>
 
         {/* Stats */}
