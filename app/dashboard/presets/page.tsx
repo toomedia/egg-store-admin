@@ -24,6 +24,7 @@ interface Preset {
   preset_status?: 'draft' | 'pending_approval' | 'approved' | 'rejected';
   admin_notes?: string; approved_at?: string;
   owned_by?: string;
+  owner?: { name?: string } | null;
   concept?: string;
   egg_prompts?: string[];
 }
@@ -89,7 +90,7 @@ const Page = () => {
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({ titleEn: '', descEn: '', size: { value: '', price: 0 }, price: '', images: [] });
 
-  const sizes = [{ value: 24, price: 0.99 }];
+  const sizes = [{ value: 24, price: 2.99 }];
 
 
   const handleRegenerate = async (presetId: string, presetName: string) => {
@@ -179,17 +180,27 @@ const Page = () => {
   };
 
   useEffect(() => {
-    setFilteredPreset(searchQuery ? preset.filter(p => p.preset_name?.en_name?.toLowerCase().includes(searchQuery.toLowerCase())) : preset);
+    const filtered = searchQuery
+      ? preset.filter(p => p.preset_name?.en_name?.toLowerCase().includes(searchQuery.toLowerCase()))
+      : preset;
+    // Sort: sold-out (needs regeneration) first, then by created_at desc
+    const sorted = [...filtered].sort((a, b) => {
+      const aOwned = a.owned_by ? 1 : 0;
+      const bOwned = b.owned_by ? 1 : 0;
+      if (aOwned !== bOwned) return bOwned - aOwned; // sold-out first
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+    setFilteredPreset(sorted);
   }, [preset, searchQuery]);
 
   useEffect(() => {
     const fetch = async () => {
-      const { data, error } = await supabase.from('presets').select('*').or('preset_status.eq.approved,preset_status.is.null').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('presets').select('*, owner:users!owned_by(name)').or('preset_status.eq.approved,preset_status.is.null').order('created_at', { ascending: false });
       if (!error) { setPreset(data || []); try { await setItem(ALL_PRESETS_KEY, data || []); } catch {} }
     };
     fetch();
     const ch = supabase.channel('public:presets').on('postgres_changes', { event: '*', schema: 'public', table: 'presets' }, async () => {
-      const { data } = await supabase.from('presets').select('*').or('preset_status.eq.approved,preset_status.is.null').order('created_at', { ascending: false });
+      const { data } = await supabase.from('presets').select('*, owner:users!owned_by(name)').or('preset_status.eq.approved,preset_status.is.null').order('created_at', { ascending: false });
       setPreset(data || []);
     }).subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -324,8 +335,9 @@ const Page = () => {
   }
 
   // ── LIST VIEW ───────────────────────────────────────────────────────────────
-  const live = preset.filter(p => p.preset_status === 'approved').length;
+  const live = preset.filter(p => p.preset_status === 'approved' && !p.owned_by).length;
   const pending = preset.filter(p => p.preset_status === 'pending_approval').length;
+  const soldOut = preset.filter(p => !!p.owned_by).length;
 
   return (
     <div className="pp">
@@ -353,7 +365,7 @@ const Page = () => {
 
         {/* Stats */}
         <div className="flex gap-8 mb-8 pb-8 border-b border-gray-200">
-          {[{ label: 'Total', value: preset.length }, { label: 'Live', value: live }, { label: 'Pending', value: pending }].map(s => (
+          {[{ label: 'Total', value: preset.length }, { label: 'Live', value: live }, { label: 'Sold Out', value: soldOut }, { label: 'Pending', value: pending }].map(s => (
             <div key={s.label}>
               <p className="text-3xl font-light  ">{s.value}</p>
               <p className="text-[10px] uppercase tracking-widest text-gray-500 mt-0.5">{s.label}</p>
@@ -361,6 +373,19 @@ const Page = () => {
           ))}
           {searchQuery && <div className="ml-auto flex items-center"><p className="text-sm text-gray-600">{filteredPreset.length} result{filteredPreset.length !== 1 ? 's' : ''} for <span className="text-[#e6d281]">"{searchQuery}"</span></p></div>}
         </div>
+
+        {/* Regeneration alert */}
+        {soldOut > 0 && (
+          <div className="mb-6 p-4 rounded-xl border border-orange-200 bg-orange-50 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center shrink-0">
+              <RefreshCw size={18} className="text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-orange-900">{soldOut} deck{soldOut > 1 ? 's' : ''} sold out — ready to regenerate</p>
+              <p className="text-xs text-orange-700 mt-0.5">Sold presets are shown at the top. Click Regenerate to create a new version.</p>
+            </div>
+          </div>
+        )}
 
         {/* List */}
         {filteredPreset.length > 0 ? (
@@ -386,11 +411,19 @@ const Page = () => {
                   <div className="flex items-center gap-2 mb-0.5">
                     <h2 className="text-sm   font-medium truncate">{item.preset_name?.en_name || 'Untitled'}</h2>
                     <StatusBadge status={item.preset_status || ''} />
+                    {item.owned_by && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-red-100 text-red-600 border border-red-200">
+                        Sold Out
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-4 text-[11px] text-gray-500">
                     <span className="flex items-center gap-1"><Calendar size={10} />{new Date(item.created_at).toLocaleDateString()}</span>
                     <span className="flex items-center gap-1"><ImageIcon size={10} />{item.preset_images?.length || 0}</span>
                     <span className="text-[#e6d281]">€{item.preset_price || '0.00'}</span>
+                    {item.owned_by && (
+                      <span className="text-red-500 font-medium">Owned by @{item.owner?.name || 'Unknown'}</span>
+                    )}
                   </div>
                 </div>
 
