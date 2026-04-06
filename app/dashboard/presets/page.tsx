@@ -3,10 +3,11 @@ import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from "../../../utils/supabaseClient";
+import { getAutoGenerateApiOrigin } from "../../../utils/autoGenerateApi";
 import {
   ArrowLeft, PlusCircle, Image as ImageIcon, Calendar,
   Edit, Trash2, X, CheckCircle, XCircle, Clock,
-  Loader2, Sparkles, RefreshCw,
+  Loader2, Sparkles, RefreshCw, ChevronLeft, ChevronRight, Upload,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -70,6 +71,114 @@ const StatusBadge = ({ status }: { status: string }) => {
   return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider border ${c.cls}`}>{c.icon}{c.label}</span>;
 };
 
+const ImageLightboxModal = ({
+  isOpen,
+  images,
+  initialIndex,
+  onClose,
+}: {
+  isOpen: boolean;
+  images: string[];
+  initialIndex: number;
+  onClose: () => void;
+}) => {
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    if (isOpen) {
+      const safe = Math.max(0, Math.min(initialIndex, Math.max(0, images.length - 1)));
+      setIdx(safe);
+    }
+  }, [isOpen, initialIndex, images]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && images.length > 1) {
+        e.preventDefault();
+        setIdx((i) => (i > 0 ? i - 1 : images.length - 1));
+      }
+      if (e.key === 'ArrowRight' && images.length > 1) {
+        e.preventDefault();
+        setIdx((i) => (i < images.length - 1 ? i + 1 : 0));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, images.length, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
+  if (!isOpen || images.length === 0) return null;
+
+  const src = images[idx];
+  const showNav = images.length > 1;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-8 bg-black/85 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Image preview"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 z-[70] rounded-full p-2.5 text-white/90 hover:bg-white/10 transition-colors"
+        aria-label="Close"
+      >
+        <X size={24} />
+      </button>
+      {showNav && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIdx((i) => (i > 0 ? i - 1 : images.length - 1));
+            }}
+            className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 z-[70] rounded-full p-2 sm:p-3 text-white/90 hover:bg-white/10 flex"
+            aria-label="Previous image"
+          >
+            <ChevronLeft size={28} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIdx((i) => (i < images.length - 1 ? i + 1 : 0));
+            }}
+            className="absolute right-1 sm:right-4 top-1/2 -translate-y-1/2 z-[70] rounded-full p-2 sm:p-3 text-white/90 hover:bg-white/10 flex"
+            aria-label="Next image"
+          >
+            <ChevronRight size={28} />
+          </button>
+        </>
+      )}
+      <div
+        className="relative w-full max-w-5xl max-h-[min(85vh,900px)] aspect-[4/3] sm:aspect-auto sm:h-[min(85vh,900px)] sm:min-h-[200px]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Image src={src} alt="" fill className="object-contain" sizes="(max-width: 1280px) 100vw, 1024px" priority />
+      </div>
+      {showNav && (
+        <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm text-white/70 tabular-nums">
+          {idx + 1} / {images.length}
+        </p>
+      )}
+    </div>
+  );
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 const Page = () => {
   const searchParams = useSearchParams();
@@ -88,19 +197,20 @@ const Page = () => {
   const [backfillBusy, setBackfillBusy] = useState<string | null>(null);
   const [backfillRowFeedback, setBackfillRowFeedback] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [imageLightbox, setImageLightbox] = useState<{ images: string[]; index: number } | null>(null);
   const [formData, setFormData] = useState<FormData>({ titleEn: '', descEn: '', size: { value: '', price: 0 }, price: '', images: [] });
 
   const sizes = [{ value: 24, price: 2.99 }];
 
 
   const handleRegenerate = async (presetId: string, presetName: string) => {
-    const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
+    const apiOrigin = getAutoGenerateApiOrigin();
     const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
-    if (!apiUrl || !adminKey) { alert('Regeneration API not configured.'); return; }
+    if (!apiOrigin || !adminKey) { alert('Regeneration API not configured.'); return; }
     if (!confirm(`Regenerate a new version of "${presetName}"? This uses OpenAI credits and creates a new preset for review.`)) return;
     setRegeneratingId(presetId);
     try {
-      const res = await fetch(`${apiUrl}/api/regenerate-preset`, {
+      const res = await fetch(`${apiOrigin}/api/regenerate-preset`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
         body: JSON.stringify({ preset_id: presetId }),
       });
@@ -117,10 +227,10 @@ const Page = () => {
   const handleBackfill = async (opts: { presetId: string; presetName?: string }) => {
     const { presetId } = opts;
     const label = opts.presetName?.trim() || 'this preset';
-    const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
+    const apiOrigin = getAutoGenerateApiOrigin();
     const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
 
-    if (!apiUrl || !adminKey) {
+    if (!apiOrigin || !adminKey) {
       setBackfillRowFeedback({ id: presetId, success: false, message: 'API not configured.' });
       return;
     }
@@ -129,7 +239,7 @@ const Page = () => {
     setBackfillRowFeedback(null);
     setBackfillBusy(presetId);
     try {
-      const res = await fetch(`${apiUrl}/api/backfill-preset-prompts`, {
+      const res = await fetch(`${apiOrigin}/api/backfill-preset-prompts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
         body: JSON.stringify({ presetId }),
@@ -162,13 +272,13 @@ const Page = () => {
   };
 
   const handleAutoGenerate = async () => {
-    const apiUrl = process.env.NEXT_PUBLIC_AUTO_GENERATE_API_URL;
+    const apiOrigin = getAutoGenerateApiOrigin();
     const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
 
-    if (!apiUrl || !adminKey) { setGenResult({ success: false, message: 'API not configured.' }); return; }
+    if (!apiOrigin || !adminKey) { setGenResult({ success: false, message: 'API not configured.' }); return; }
     setAutoGenerating(true); setGenResult(null);
     try {
-      const res = await fetch(`${apiUrl}/api/auto-generate-preset`, {
+      const res = await fetch(`${apiOrigin}/api/auto-generate-preset`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
         body: JSON.stringify({ concept: genForm.concept || undefined, name: genForm.name || undefined, count: 12 }),
       });
@@ -341,10 +451,17 @@ const Page = () => {
 
   return (
     <div className="pp">
-      <div className="max-w-5xl mx-auto px-6 py-10">
+      <ImageLightboxModal
+        isOpen={imageLightbox !== null}
+        images={imageLightbox?.images ?? []}
+        initialIndex={imageLightbox?.index ?? 0}
+        onClose={() => setImageLightbox(null)}
+      />
+
+      <div className="max-w-6xl mx-auto px-5 sm:px-8 py-10 md:py-12">
 
         {/* Header */}
-        <div className="flex items-end justify-between mb-10">
+        <div className="flex items-end justify-between mb-10 flex-wrap gap-6">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
             <h1 className="serif text-5xl leading-none text-gray-900">Presets</h1>
@@ -389,79 +506,124 @@ const Page = () => {
 
         {/* List */}
         {filteredPreset.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-5 md:space-y-6">
             {filteredPreset.map((item, idx) => (
-              <div key={item.id} className="card fu p-4 flex items-center gap-5" style={{ animationDelay: `${idx * 30}ms` }}>
-                {/* Image strip */}
-                <div className="flex gap-1.5 shrink-0">
-                  {(item.preset_images || []).slice(0, 12).map((url, i) => (
-                    <div key={i} className="w-11 h-11 rounded-lg overflow-hidden bg-gray-100">
-                      <SafeImage src={url} alt="" className="w-full h-full" />
+              <div
+                key={item.id}
+                className="card fu rounded-2xl p-5 md:p-6 shadow-sm border border-gray-100"
+                style={{ animationDelay: `${idx * 30}ms` }}
+              >
+                <div className="flex flex-col lg:flex-row lg:items-start gap-5 lg:gap-8">
+                  {/* Thumbnails — grid + lightbox */}
+                  <div className="shrink-0 lg:w-[min(100%,22rem)]">
+                    <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2.5">Preview</p>
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2.5">
+                      {(item.preset_images || []).slice(0, 12).map((url, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          className="aspect-square rounded-xl overflow-hidden bg-gray-100 ring-1 ring-gray-100 cursor-zoom-in hover:ring-2 hover:ring-[#e6d281]/50 transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e6d281] text-left"
+                          onClick={() =>
+                            setImageLightbox({
+                              images: (item.preset_images || []).slice(0, 12),
+                              index: i,
+                            })
+                          }
+                          aria-label={`Open image ${i + 1} in preview`}
+                        >
+                          <SafeImage src={url} alt="" className="w-full h-full pointer-events-none" />
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                  {(item.preset_images?.length || 0) > 12 && (
-                    <div className="w-11 h-11 rounded-lg bg-gray-100 flex items-center justify-center">
-                      <span className="text-[10px] text-gray-600">+{item.preset_images.length - 5}</span>
-                    </div>
-                  )}
-                </div>
+                    {(item.preset_images?.length || 0) > 12 && (
+                      <p className="text-xs text-gray-500 mt-2">+{item.preset_images!.length - 12} more images</p>
+                    )}
+                  </div>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <h2 className="text-sm   font-medium truncate">{item.preset_name?.en_name || 'Untitled'}</h2>
-                    <StatusBadge status={item.preset_status || ''} />
-                    {item.owned_by && (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-red-100 text-red-600 border border-red-200">
-                        Sold Out
+                  {/* Title, meta, owner — full width middle column */}
+                  <div className="flex-1 min-w-0 flex flex-col gap-3">
+                    <div className="flex flex-wrap items-start gap-x-2 gap-y-2">
+                      <h2 className="text-lg md:text-xl font-semibold text-gray-900 leading-snug break-words">
+                        {item.preset_name?.en_name || 'Untitled'}
+                      </h2>
+                      <StatusBadge status={item.preset_status || ''} />
+                      {item.owned_by && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-red-50 text-red-700 border border-red-200">
+                          Sold out
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-600">
+                      <span className="inline-flex items-center gap-2">
+                        <Calendar size={16} className="text-gray-400 shrink-0" aria-hidden />
+                        {new Date(item.created_at).toLocaleDateString()}
                       </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-4 text-[11px] text-gray-500">
-                    <span className="flex items-center gap-1"><Calendar size={10} />{new Date(item.created_at).toLocaleDateString()}</span>
-                    <span className="flex items-center gap-1"><ImageIcon size={10} />{item.preset_images?.length || 0}</span>
-                    <span className="text-[#e6d281]">€{item.preset_price || '0.00'}</span>
-                    {item.owned_by && (
-                      <span className="text-red-500 font-medium">Owned by @{item.owner?.name || 'Unknown'}</span>
-                    )}
-                  </div>
-                </div>
+                      <span className="inline-flex items-center gap-2">
+                        <ImageIcon size={16} className="text-gray-400 shrink-0" aria-hidden />
+                        {item.preset_images?.length || 0} images
+                      </span>
+                      <span className="font-medium text-amber-900 tabular-nums">€{item.preset_price || '0.00'}</span>
+                    </div>
 
-                {/* Actions */}
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <div className="flex gap-1">
+                    {item.owned_by && (
+                      <div className="rounded-xl border border-red-100 bg-red-50/80 px-3 py-2.5 text-sm text-red-900">
+                        <span className="font-medium">Owned by</span>{' '}
+                        <span className="font-semibold">@{item.owner?.name || 'Unknown'}</span>
+                      </div>
+                    )}
+
+                    {backfillRowFeedback?.id === item.id && (
+                      <p
+                        className={`text-sm leading-snug ${backfillRowFeedback.success ? 'text-emerald-700' : 'text-red-700'}`}
+                      >
+                        {backfillRowFeedback.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Actions — right column on large screens */}
+                  <div className="flex flex-col gap-2 shrink-0 w-full sm:flex-row sm:flex-wrap lg:flex-col lg:w-48">
                     {item.owned_by && (
                       <button
                         type="button"
                         onClick={() => handleRegenerate(item.id, item.preset_name?.en_name || 'Untitled')}
-                        disabled={regeneratingId === item.id}
-                        title="Sold out — regenerate a new version"
-                        className="p-2 text-[9px] rounded-lg text-gray-500 hover:text-orange-500 hover:bg-orange-500/5 transition-all disabled:opacity-30"
+                        disabled={regeneratingId === item.id || backfillBusy !== null}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-orange-200 bg-orange-50 text-orange-900 hover:bg-orange-100 transition-colors disabled:opacity-40"
                       >
-                        {regeneratingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Regenerate
+                        {regeneratingId === item.id ? <Loader2 size={16} className="animate-spin shrink-0" /> : <RefreshCw size={16} className="shrink-0" />}
+                        Regenerate
                       </button>
                     )}
                     <button
                       type="button"
                       onClick={() => handleBackfill({ presetId: item.id, presetName: item.preset_name?.en_name || undefined })}
                       disabled={backfillBusy !== null}
-                      title="Backfill vision prompts for this preset only"
-                      className="p-2 text-[9px] rounded-lg text-gray-500 hover:text-purple-500 hover:bg-purple-500/5 transition-all disabled:opacity-30"
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100 transition-colors disabled:opacity-40"
                     >
-                      {backfillBusy === item.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Backfill
+                      {backfillBusy === item.id ? <Loader2 size={16} className="animate-spin shrink-0" /> : <Upload size={16} className="shrink-0" />}
+                      Backfill
                     </button>
-                    <button type="button" onClick={() => handleEdit(item.id)} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-all">
-                      <Edit size={14} />
-                    </button>
-                    <button type="button" onClick={() => handleDelete(item.id)} disabled={deletingId === item.id} className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all disabled:opacity-30">
-                      {deletingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    </button>
+                    <div className="flex gap-2 justify-stretch sm:justify-end lg:justify-stretch pt-1 border-t border-gray-100 lg:border-0 lg:pt-0">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(item.id)}
+                        className="flex-1 lg:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50"
+                      >
+                        <Edit size={16} />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item.id)}
+                        disabled={deletingId === item.id}
+                        className="flex-1 lg:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 disabled:opacity-40"
+                      >
+                        {deletingId === item.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                  {backfillRowFeedback?.id === item.id && (
-                    <p className={`max-w-[14rem] text-right text-[11px] leading-snug ${backfillRowFeedback.success ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {backfillRowFeedback.message}
-                    </p>
-                  )}
                 </div>
               </div>
             ))}
