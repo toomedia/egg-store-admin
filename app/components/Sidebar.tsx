@@ -15,7 +15,6 @@ import {
   X,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
-
 export default function Sidebar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
