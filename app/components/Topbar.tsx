@@ -66,17 +66,17 @@ const Topbar: React.FC = () => {
   };
 
   const getSearchContext = () => {
-    if (pathname.includes('/orders')) return 'orders';
+    if (pathname.includes('/ownership') || pathname.includes('/orders')) return 'ownership';
     if (pathname.includes('/presets')) return 'presets';
-    if (pathname.includes('/customers')) return 'customers';
+    if (pathname.includes('/customer')) return 'customers';
     return 'dashboard';
   };
 
   const getPlaceholderText = () => {
     const context = getSearchContext();
     switch (context) {
-      case 'orders':
-        return 'Search by order ID, customer name, email...';
+      case 'ownership':
+        return 'Search presets or owner email...';
       case 'presets':
         return 'Search presets by name, description...';
       case 'customers':

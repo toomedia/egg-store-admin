@@ -397,10 +397,10 @@ const processUserGrowthData = (usersData: any[]) => {
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
-          <Link href="/dashboard/orders">
+          <Link href="/dashboard/ownership">
             <button className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg shadow hover:bg-gray-100 text-base transition-colors">
               <Eye className="w-4 h-4 text-[#e6d281]" />
-              View Orders
+              View Ownership
             </button>
           </Link>
           <Link href="/dashboard/presets">

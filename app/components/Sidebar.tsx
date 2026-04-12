@@ -21,7 +21,7 @@ export default function Sidebar() {
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-5 w-5" /> },
-    { href: "/dashboard/orders", label: "Orders", icon: <ShoppingCart className="h-5 w-5" /> },
+    { href: "/dashboard/ownership", label: "Ownership", icon: <ShoppingCart className="h-5 w-5" /> },
     { href: "/dashboard/presets", label: "Presets", icon: <Box className="h-5 w-5" /> },
     { href: "/dashboard/preset-requests", label: "Preset Requests", icon: <Clock className="h-5 w-5" /> },
     { href: "/dashboard/ownCreations", label: "Own Creations", icon: <Sparkles className="h-5 w-5" /> },
