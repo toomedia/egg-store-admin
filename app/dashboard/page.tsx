@@ -2,18 +2,16 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../utils/supabaseClient";
-import Image from "next/image";
 import {
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   LineChart,
   Line,
+  AreaChart,
+  Area,
 } from "recharts";
 import {
   ShoppingCart,
@@ -24,19 +22,23 @@ import {
   AlertTriangle,
   TrendingUp,
   DollarSign,
-  User,
   Users,
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  Link2,
+  Gem,
+  Package,
+  Clock,
+  CheckCircle,
+  Sparkles,
+  AlertCircle,
 } from "lucide-react";
 
-// Main Dashboard Component
 const Dashboard = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [presets, setPresets] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
-  const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [monthlyOrdersData, setMonthlyOrdersData] = useState<any[]>([]);
@@ -46,47 +48,49 @@ const Dashboard = () => {
     avgOrderValue: 0,
     returningCustomers: 0,
   });
-  type SectionKey = 'charts' | 'performance' | 'bestSellers' | 'recentOrders' | 'activity';
+  const [referralStats, setReferralStats] = useState({
+    codesGenerated: 0,
+    referralsCompleted: 0,
+    creditsGranted: 0,
+    creditsConsumed: 0,
+    conversionRate: 0,
+  });
+  const [recentReferrals, setRecentReferrals] = useState<any[]>([]);
+  const [presetInventory, setPresetInventory] = useState({
+    available: 0,
+    soldOut: 0,
+    pendingApproval: 0,
+    totalPublic: 0,
+  });
+  const [mintingStats, setMintingStats] = useState({
+    totalMinted: 0,
+    mintedThisWeek: 0,
+    silver: 0,
+    gold: 0,
+    platinum: 0,
+  });
+
+  type SectionKey = 'charts' | 'inventory' | 'referrals';
   const [expandedSections, setExpandedSections] = useState<Record<SectionKey, boolean>>({
     charts: true,
-    performance: true,
-    bestSellers: true,
-    recentOrders: true,
-    activity: true,
+    inventory: true,
+    referrals: false,
   });
 
   useEffect(() => {
     fetchDashboardData();
-    
-    // Set up real-time subscriptions
+
     const ordersChannel = supabase
       .channel('dashboard-orders')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'orders' }, 
-        () => {
-          fetchOrders();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders())
       .subscribe();
-
     const presetsChannel = supabase
       .channel('dashboard-presets')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'presets' }, 
-        () => {
-          fetchPresets();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'presets' }, () => fetchPresets())
       .subscribe();
-
     const usersChannel = supabase
       .channel('dashboard-users')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'users' }, 
-        () => {
-          fetchUsers();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => fetchUsers())
       .subscribe();
 
     return () => {
@@ -102,10 +106,7 @@ const Dashboard = () => {
       if (error) throw error;
       setOrders(data || []);
       return data || [];
-    } catch (error) {
-      console.error("Error fetching orders:", error);
-      return [];
-    }
+    } catch (error) { console.error("Error fetching orders:", error); return []; }
   };
 
   const fetchPresets = async () => {
@@ -114,10 +115,7 @@ const Dashboard = () => {
       if (error) throw error;
       setPresets(data || []);
       return data || [];
-    } catch (error) {
-      console.error("Error fetching presets:", error);
-      return [];
-    }
+    } catch (error) { console.error("Error fetching presets:", error); return []; }
   };
 
   const fetchUsers = async () => {
@@ -126,24 +124,106 @@ const Dashboard = () => {
       if (error) throw error;
       setUsers(data || []);
       return data || [];
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      return [];
-    }
+    } catch (error) { console.error("Error fetching users:", error); return []; }
+  };
+
+  const fetchReferralStats = async () => {
+    try {
+      const [
+        { count: codesGenerated },
+        { data: referralsData },
+        { data: creditsData },
+      ] = await Promise.all([
+        supabase.from("users").select("id", { count: "exact", head: true }).not("referral_code", "is", null),
+        supabase.from("referrals").select("id, inviter_id, invitee_id, invite_code, status, created_at, reward_granted"),
+        supabase.from("preset_claim_credits").select("id, source_type, status"),
+      ]);
+
+      const completed = (referralsData || []).filter((r: any) => r.status === "completed").length;
+      const referralCredits = (creditsData || []).filter((c: any) => c.source_type?.startsWith("referral"));
+      const consumed = referralCredits.filter((c: any) => c.status === "consumed").length;
+
+      setReferralStats({
+        codesGenerated: codesGenerated || 0,
+        referralsCompleted: completed,
+        creditsGranted: referralCredits.length,
+        creditsConsumed: consumed,
+        conversionRate: (codesGenerated || 0) > 0 ? Math.round((completed / (codesGenerated || 1)) * 100) : 0,
+      });
+
+      const recent = (referralsData || [])
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5);
+
+      if (recent.length > 0) {
+        const userIds = Array.from(new Set(recent.flatMap((r: any) => [r.inviter_id, r.invitee_id])));
+        const { data: usersInfo } = await supabase.from("users").select("id, email, name").in("id", userIds);
+        const userMap: Record<string, any> = {};
+        (usersInfo || []).forEach((u: any) => { userMap[u.id] = u; });
+
+        setRecentReferrals(recent.map((r: any) => ({
+          ...r,
+          inviter: userMap[r.inviter_id] || { email: "Unknown" },
+          invitee: userMap[r.invitee_id] || { email: "Unknown" },
+        })));
+      }
+    } catch (error) { console.error("Error fetching referral stats:", error); }
+  };
+
+  const fetchPresetInventory = async () => {
+    try {
+      const [
+        { count: available },
+        { count: soldOut },
+        { count: pendingApproval },
+        { count: totalPublic },
+      ] = await Promise.all([
+        supabase.from("presets").select("id", { count: "exact", head: true })
+          .eq("is_public", true).eq("preset_status", "approved").is("owned_by", null),
+        supabase.from("presets").select("id", { count: "exact", head: true })
+          .eq("is_public", true).eq("preset_status", "approved").not("owned_by", "is", null),
+        supabase.from("presets").select("id", { count: "exact", head: true })
+          .eq("preset_status", "pending_approval"),
+        supabase.from("presets").select("id", { count: "exact", head: true })
+          .eq("is_public", true).eq("preset_status", "approved"),
+      ]);
+      setPresetInventory({ available: available || 0, soldOut: soldOut || 0, pendingApproval: pendingApproval || 0, totalPublic: totalPublic || 0 });
+    } catch (error) { console.error("Error fetching preset inventory:", error); }
+  };
+
+  const fetchMintingStats = async () => {
+    try {
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const [
+        { count: totalMinted },
+        { count: mintedThisWeek },
+        { data: rarityData },
+      ] = await Promise.all([
+        supabase.from("minted_eggs").select("id", { count: "exact", head: true }),
+        supabase.from("minted_eggs").select("id", { count: "exact", head: true }).gte("minted_at", oneWeekAgo),
+        supabase.from("minted_eggs").select("rarity_tier"),
+      ]);
+      const tiers = (rarityData || []).reduce((acc: any, row: any) => {
+        const tier = (row.rarity_tier || "").toLowerCase();
+        if (tier === "silver") acc.silver++;
+        else if (tier === "gold") acc.gold++;
+        else if (tier === "platinum") acc.platinum++;
+        return acc;
+      }, { silver: 0, gold: 0, platinum: 0 });
+      setMintingStats({ totalMinted: totalMinted || 0, mintedThisWeek: mintedThisWeek || 0, ...tiers });
+    } catch (error) { console.error("Error fetching minting stats:", error); }
   };
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       setError(null);
-
       const [ordersData, presetsData, usersData] = await Promise.all([
-        fetchOrders(),
-        fetchPresets(),
-        fetchUsers()
+        fetchOrders(), fetchPresets(), fetchUsers(),
       ]);
-
-      buildActivities(ordersData, presetsData, usersData);
+      fetchReferralStats();
+      fetchPresetInventory();
+      fetchMintingStats();
       processChartData(ordersData, usersData);
       calculateMetrics(ordersData, usersData);
     } catch (error) {
@@ -155,441 +235,318 @@ const Dashboard = () => {
   };
 
   const processChartData = (ordersData: any[], usersData: any[]) => {
-    const monthlyOrders = processMonthlyOrdersData(ordersData);
-    setMonthlyOrdersData(monthlyOrders);
-    
-    const userGrowth = processUserGrowthData(usersData);
-    setUserGrowthData(userGrowth);
+    setMonthlyOrdersData(processMonthlyOrdersData(ordersData));
+    setUserGrowthData(processUserGrowthData(usersData));
   };
 
- const processMonthlyOrdersData = (ordersData: any[]) => {
-  const last6Months: any[] = [];
-  const now = new Date();
-  
-  for (let i = 5; i >= 0; i--) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const monthName = date.toLocaleString('default', { month: 'short' });
-    last6Months.push({ name: monthName, orders: 0, revenue: 0 });
-  }
-  
-  ordersData.forEach(order => {
-    if (order.created_at && order.payment_status === 'completed') {
-      const orderDate = new Date(order.created_at);
-      const monthName = orderDate.toLocaleString('default', { month: 'short' });
-      
-      const monthData = last6Months.find(m => m.name === monthName);
-      if (monthData) {
-        monthData.orders += 1;
-        monthData.revenue += order.total_amount || 0;
-      }
+  const processMonthlyOrdersData = (ordersData: any[]) => {
+    const last6Months: any[] = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      last6Months.push({ name: date.toLocaleString('default', { month: 'short' }), orders: 0, revenue: 0 });
     }
-  });
-  
-  return last6Months;
-};
+    ordersData.forEach(order => {
+      if (order.created_at && order.payment_status === 'completed') {
+        const monthName = new Date(order.created_at).toLocaleString('default', { month: 'short' });
+        const monthData = last6Months.find(m => m.name === monthName);
+        if (monthData) { monthData.orders += 1; monthData.revenue += order.total_amount || 0; }
+      }
+    });
+    return last6Months;
+  };
 
-const processUserGrowthData = (usersData: any[]) => {
-  const last6Months: any[] = [];
-  const now = new Date();
-  
-  for (let i = 5; i >= 0; i--) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const monthName = date.toLocaleString('default', { month: 'short' });
-    last6Months.push({ name: monthName, users: 0, cumulative: 0 });
-  }
-  
-  usersData.forEach(user => {
-    if (user.created_at) {
-      const userDate = new Date(user.created_at);
-      const monthName = userDate.toLocaleString('default', { month: 'short' });
-      
-      const monthData = last6Months.find(m => m.name === monthName);
-      if (monthData) {
-        monthData.users += 1;
-      }
+  const processUserGrowthData = (usersData: any[]) => {
+    const last6Months: any[] = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      last6Months.push({ name: date.toLocaleString('default', { month: 'short' }), users: 0, cumulative: 0 });
     }
-  });
-  
-  let cumulativeTotal = 0;
-  for (let month of last6Months) {
-    cumulativeTotal += month.users;
-    month.cumulative = cumulativeTotal;
-  }
-  
-  return last6Months;
-};
+    usersData.forEach(user => {
+      if (user.created_at) {
+        const monthName = new Date(user.created_at).toLocaleString('default', { month: 'short' });
+        const monthData = last6Months.find(m => m.name === monthName);
+        if (monthData) monthData.users += 1;
+      }
+    });
+    let cumulative = 0;
+    for (const month of last6Months) { cumulative += month.users; month.cumulative = cumulative; }
+    return last6Months;
+  };
 
   const calculateMetrics = (ordersData: any[], usersData: any[]) => {
     const completedOrders = ordersData.filter(order => order.payment_status === 'completed').length;
     const conversionRate = usersData.length > 0 ? (completedOrders / usersData.length) * 100 : 0;
-    
     const totalRevenue = ordersData
       .filter(order => order.payment_status === 'completed')
       .reduce((sum, order) => sum + (order.total_amount || 0), 0);
     const avgOrderValue = completedOrders > 0 ? totalRevenue / completedOrders : 0;
-    
-    const userOrderCount: {[key: string]: number} = {};
-    ordersData.forEach(order => {
-      const userId = order.user_id;
-      if (userId) {
-        userOrderCount[userId] = (userOrderCount[userId] || 0) + 1;
-      }
-    });
-    
+    const userOrderCount: Record<string, number> = {};
+    ordersData.forEach(order => { if (order.user_id) userOrderCount[order.user_id] = (userOrderCount[order.user_id] || 0) + 1; });
     const returningCustomers = Object.values(userOrderCount).filter(count => count > 1).length;
-    
-    setMetrics({
-      conversionRate: Math.round(conversionRate),
-      avgOrderValue: Math.round(avgOrderValue),
-      returningCustomers
-    });
+    setMetrics({ conversionRate: Math.round(conversionRate), avgOrderValue: Math.round(avgOrderValue), returningCustomers });
   };
-
-  const buildActivities = (
-    ordersData: any[],
-    presetsData: any[],
-    usersData: any[]
-  ) => {
-    const sortedOrders = ordersData
-      .slice()
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-    const sortedPresets = presetsData
-      .slice()
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-    const sortedUsers = usersData
-      .slice()
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
-    const order = sortedOrders[0];
-    const preset = sortedPresets[0];
-    const user = sortedUsers[0];
-
-    const acts = [];
-
-    if (order) {
-      acts.push({
-        icon: <ShoppingCart className="w-5 h-5" />,
-        message: `Order #${order.id} completed`,
-        sub: order.product_name || "Egg Card",
-        time: getRelativeTime(order.created_at),
-        timeObj: order.created_at,
-        tag: "Completed",
-      });
-    }
-
-    if (preset) {
-      acts.push({
-        icon: <Box className="w-5 h-5" />,
-        message: "New preset created",
-        sub: preset.preset_name?.en_name || "Untitled",
-        time: getRelativeTime(preset.created_at),
-        timeObj: preset.created_at,
-        tag: "New Product",
-      });
-    }
-
-    if (user) {
-      acts.push({
-        icon: <User className="w-5 h-5" />,
-        message: "New customer signup",
-        sub: user.email || "No email",
-        time: getRelativeTime(user.created_at),
-        timeObj: user.created_at,
-        tag: "New Customer",
-      });
-    }
-
-    setActivities(
-      acts.sort(
-        (a, b) => new Date(b.timeObj).getTime() - new Date(a.timeObj).getTime()
-      )
-    );
-  };
-
-  const getRelativeTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const diff = (new Date().getTime() - date.getTime()) / 1000;
-    if (diff < 60) return "Just now";
-    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
-    return `${Math.floor(diff / 86400)} d ago`;
-  };
-
-  // Calculate sales count per preset
-  const salesCountMap: { [key: string]: number } = {};
-  orders.forEach((order) => {
-    const id = order.preset_id;
-    if (id) {
-      salesCountMap[id] = (salesCountMap[id] || 0) + 1;
-    }
-  });
-
-  // Create enhanced preset sales data with images and descriptions
-  const presetSalesData = presets
-    .map((preset) => {
-      const salesCount = salesCountMap[preset.id] || 0;
-      return {
-        id: preset.id,
-        title: preset.preset_name?.en_name || "Untitled Preset",
-        description: preset.preset_description?.en_description || "No description available",
-        image: preset.preset_images?.[0] || "/placeholder-image.jpg",
-        price: preset.preset_price || 0,
-        salesCount: salesCount,
-        revenue: salesCount * (preset.preset_price || 0),
-      };
-    })
-    .sort((a, b) => b.salesCount - a.salesCount)
-    .slice(0, 4);
-
-  // Get latest orders for the orders table with preset information
-  const latestOrders = orders
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 5)
-    .map(order => {
-      const preset = presets.find(p => p.id === order.preset_id);
-      return {
-        ...order,
-        preset: preset || null
-      };
-    });
 
   const toggleSection = (section: SectionKey) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
+
+  const totalRevenue = orders
+    .filter(order => order.payment_status === 'completed')
+    .reduce((total, order) => total + (order.total_amount || 0), 0);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <RefreshCw className="animate-spin h-10 w-10 text-[#e6d281] mx-auto mb-4" />
-          <p className="text-gray-500 text-base">Loading dashboard...</p>
+          <RefreshCw className="animate-spin h-8 w-8 text-[#c9b655] mx-auto mb-3" />
+          <p className="text-gray-400 text-sm">Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6 font-sans">
-      <div className="max-w-6xl mx-auto">
-      <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-4">
-        <div>
-          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Dashboard</p>
-          <h1 className="serif text-5xl leading-none text-gray-900">Overview</h1>
-          <p className="text-sm text-gray-600 mt-2">Your egg card store at a glance</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <button 
-            onClick={fetchDashboardData}
-            className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg shadow hover:bg-gray-100 text-base transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-          <Link href="/dashboard/orders">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg shadow hover:bg-gray-100 text-base transition-colors">
-              <Eye className="w-4 h-4 text-[#e6d281]" />
-              View Orders
-            </button>
-          </Link>
-          <Link href="/dashboard/presets">
-            <button className="flex items-center gap-2 px-4 py-2 bg-[#e6d281] text-black rounded-lg shadow hover:bg-[#d4c073] text-base transition-colors">
-              <Plus className="w-4 h-4" />
-              Add Preset
-            </button>
-          </Link>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
+      <div className="max-w-7xl mx-auto">
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
           <div>
-            <p className="font-semibold text-base">Error:</p>
-            <p className="text-base">{error}</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 mb-1">Dashboard</p>
+            <h1 className="text-4xl font-light text-gray-900 tracking-tight">Overview</h1>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={fetchDashboardData}
+              className="flex items-center gap-2 px-3.5 py-2 text-gray-500 rounded-lg border border-gray-200 hover:bg-white hover:border-gray-300 text-sm transition-all"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Refresh
+            </button>
+            <Link href="/dashboard/orders">
+              <button className="flex items-center gap-2 px-3.5 py-2 text-gray-600 rounded-lg border border-gray-200 hover:bg-white hover:border-gray-300 text-sm transition-all">
+                <Eye className="w-3.5 h-3.5" />
+                Orders
+              </button>
+            </Link>
+            <Link href="/dashboard/presets">
+              <button className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-sm transition-all">
+                <Plus className="w-3.5 h-3.5" />
+                Add Preset
+              </button>
+            </Link>
           </div>
         </div>
-      )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          title="Total Orders"
-          value={orders.length}
-          icon={<ShoppingCart className="w-6 h-6" />}
-          color="bg-blue-500"
-        />
-        <StatCard
-          title="Active Presets"
-          value={presets.length}
-          icon={<Box className="w-6 h-6" />}
-          color="bg-indigo-500"
-        />
-        <StatCard
-          title="Total Users"
-          value={users.length}
-          icon={<Users className="w-6 h-6" />}
-          color="bg-emerald-500"
-        />
-        <StatCard
-          title="Total Revenue"
-          value={`$${orders
-            .filter(order => order.payment_status === 'completed')
-            .reduce((total, order) => total + (order.total_amount || 0), 0)
-            .toLocaleString()}`}
-          icon={<DollarSign className="w-6 h-6" />}
-          color="bg-[#c9b655]"
-        />
-      </div>
-
-      {/* Performance Metrics */}
-      <div className="bg-white rounded-xl shadow mb-6 overflow-hidden">
-        <div 
-          className="flex justify-between items-center p-5 cursor-pointer"
-          onClick={() => toggleSection('performance')}
-        >
-          <h2 className="serif text-2xl leading-tight text-gray-900 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-[#e6d281] shrink-0" />
-            Performance Metrics
-          </h2>
-          {expandedSections.performance ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-        </div>
-        {expandedSections.performance && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 pt-0">
-            <MetricCard
-              title="Conversion Rate"
-              value={`${metrics.conversionRate}%`}
-              description="Orders per customer"
-              trend={metrics.conversionRate > 0 ? "up" : "down"}
-              trendValue={metrics.conversionRate > 0 ? "12%" : "0%"}
-              icon={<TrendingUp className="w-4 h-4" />}
-            />
-            <MetricCard
-              title="Avg. Order Value"
-              value={`$${metrics.avgOrderValue}`}
-              description="Average revenue per order"
-              trend={metrics.avgOrderValue > 0 ? "up" : "down"}
-              trendValue={metrics.avgOrderValue > 0 ? "8%" : "0%"}
-              icon={<DollarSign className="w-4 h-4" />}
-            />
-            <MetricCard
-              title="Returning Customers"
-              value={metrics.returningCustomers}
-              description="Customers with multiple orders"
-              trend={metrics.returningCustomers > 0 ? "up" : "down"}
-              trendValue={metrics.returningCustomers > 0 ? "5%" : "0%"}
-              icon={<Users className="w-4 h-4" />}
-            />
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2 text-sm">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
           </div>
         )}
-      </div>
 
-      {/* Charts Section */}
-      <div className="bg-white rounded-xl shadow mb-6 overflow-hidden">
-        <div 
-          className="flex justify-between items-center p-5 cursor-pointer"
-          onClick={() => toggleSection('charts')}
-        >
-          <h2 className="serif text-2xl leading-tight text-gray-900 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-[#e6d281] shrink-0" />
-            Analytics Overview
-          </h2>
-          {expandedSections.charts ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+        {/* Top KPI Row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <KPICard label="Total Orders" value={orders.length} icon={<ShoppingCart className="w-4 h-4" />} accent="text-blue-600 bg-blue-50" />
+          <KPICard label="Total Users" value={users.length} icon={<Users className="w-4 h-4" />} accent="text-emerald-600 bg-emerald-50" />
+          <KPICard label="Revenue" value={`$${totalRevenue.toLocaleString()}`} icon={<DollarSign className="w-4 h-4" />} accent="text-amber-600 bg-amber-50" />
+          <KPICard label="Conversion" value={`${metrics.conversionRate}%`} icon={<TrendingUp className="w-4 h-4" />} accent="text-violet-600 bg-violet-50" sub={`${metrics.returningCustomers} returning`} />
         </div>
-        {expandedSections.charts && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-5 pt-0">
-            {/* Orders Line Chart */}
-            <div className="bg-gray-50 p-5 rounded-lg">
-              <h3 className="serif text-lg text-gray-900 mb-4 flex items-center gap-2">
-                <ShoppingCart className="w-4 h-4 text-[#e6d281] shrink-0" />
-                Monthly Orders Trend
-              </h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={monthlyOrdersData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="name" stroke="#6b7280" />
-                    <YAxis stroke="#6b7280" />
-                    <Tooltip 
-                      formatter={(value, name) => {
-                        if (name === 'orders') return [value, 'Orders'];
-                        return [`$${value}`, 'Revenue'];
-                      }}
-                      contentStyle={{ 
-                        backgroundColor: '#1f2937', 
-                        border: 'none', 
-                        borderRadius: '0.5rem',
-                        color: 'white'
-                      }}
-                    />
-                    <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="orders" 
-                      name="Orders" 
-                      stroke="#e6d281" 
-                      strokeWidth={3}
-                      activeDot={{ r: 6, fill: '#e6d281' }} 
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="revenue" 
-                      name="Revenue" 
-                      stroke="#10b981" 
-                      strokeWidth={3}
-                      activeDot={{ r: 6, fill: '#10b981' }} 
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
 
-            {/* Total Users Growth */}
-            <div className="bg-gray-50 p-5 rounded-lg">
-              <h3 className="serif text-lg text-gray-900 mb-4 flex items-center gap-2">
-                <Users className="w-4 h-4 text-[#e6d281] shrink-0" />
-                Total Users Growth
-              </h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={userGrowthData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="name" stroke="#6b7280" />
-                    <YAxis stroke="#6b7280" />
-                    <Tooltip 
-                      formatter={(value) => [`${value}`, 'Total Users']}
-                      contentStyle={{ 
-                        backgroundColor: '#1f2937', 
-                        border: 'none', 
-                        borderRadius: '0.5rem',
-                        color: 'white'
-                      }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="cumulative" 
-                      name="Total Users" 
-                      stroke="#e6d281" 
-                      strokeWidth={3}
-                      activeDot={{ r: 6, fill: '#e6d281' }} 
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+        {/* Inventory + Minting Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+
+          {/* Preset Inventory */}
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                <Package className="w-4 h-4 text-[#c9b655]" />
+                Preset Inventory
+              </h2>
+              {presetInventory.pendingApproval > 0 && (
+                <Link href="/dashboard/preset-requests" className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full hover:bg-amber-100 transition-colors">
+                  <AlertCircle className="w-3 h-3" />
+                  {presetInventory.pendingApproval} pending
+                </Link>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-emerald-50/60 rounded-lg p-3 border border-emerald-100/60">
+                <p className="text-2xl font-light text-gray-900">{presetInventory.available}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Available to sell</p>
+              </div>
+              <div className="bg-red-50/60 rounded-lg p-3 border border-red-100/60">
+                <p className="text-2xl font-light text-gray-900">{presetInventory.soldOut}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Sold out</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                <p className="text-2xl font-light text-gray-900">{presetInventory.totalPublic}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Total approved</p>
+              </div>
+              <div className="bg-amber-50/60 rounded-lg p-3 border border-amber-100/60">
+                <p className="text-2xl font-light text-gray-900">{presetInventory.pendingApproval}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Awaiting review</p>
               </div>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* NFT Minting */}
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide flex items-center gap-2 mb-4">
+              <Gem className="w-4 h-4 text-[#c9b655]" />
+              NFT Minting
+            </h2>
+            <div className="flex items-end gap-6 mb-4">
+              <div>
+                <p className="text-4xl font-light text-gray-900">{mintingStats.totalMinted}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Total minted</p>
+              </div>
+              <div className="pb-1">
+                <span className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                  <Sparkles className="w-3 h-3" />
+                  {mintingStats.mintedThisWeek} this week
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <RarityPill label="Silver" count={mintingStats.silver} color="bg-gray-100 text-gray-600 border-gray-200" />
+              <RarityPill label="Gold" count={mintingStats.gold} color="bg-amber-50 text-amber-700 border-amber-200" />
+              <RarityPill label="Platinum" count={mintingStats.platinum} color="bg-violet-50 text-violet-700 border-violet-200" />
+            </div>
+          </div>
+        </div>
+
+        {/* Charts */}
+        <div className="bg-white rounded-xl border border-gray-100 mb-6 overflow-hidden">
+          <button
+            className="flex justify-between items-center w-full p-5 text-left"
+            onClick={() => toggleSection('charts')}
+          >
+            <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-[#c9b655]" />
+              Analytics
+            </h2>
+            {expandedSections.charts ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+          </button>
+          {expandedSections.charts && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border-t border-gray-100">
+              <div className="p-5 lg:border-r border-gray-100">
+                <p className="text-xs text-gray-400 uppercase tracking-wide mb-4">Orders & Revenue</p>
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={monthlyOrdersData}>
+                      <defs>
+                        <linearGradient id="ordersFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#c9b655" stopOpacity={0.15} />
+                          <stop offset="100%" stopColor="#c9b655" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                      <XAxis dataKey="name" stroke="#9ca3af" tick={{ fontSize: 11 }} />
+                      <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: 'white', fontSize: '12px' }}
+                        formatter={(value: any, name: string) => name === 'orders' ? [value, 'Orders'] : [`$${value}`, 'Revenue']}
+                      />
+                      <Area type="monotone" dataKey="orders" stroke="#c9b655" strokeWidth={2} fill="url(#ordersFill)" />
+                      <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="p-5">
+                <p className="text-xs text-gray-400 uppercase tracking-wide mb-4">User Growth</p>
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={userGrowthData}>
+                      <defs>
+                        <linearGradient id="usersFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.12} />
+                          <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                      <XAxis dataKey="name" stroke="#9ca3af" tick={{ fontSize: 11 }} />
+                      <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: 'white', fontSize: '12px' }}
+                        formatter={(value: any) => [`${value}`, 'Total Users']}
+                      />
+                      <Area type="monotone" dataKey="cumulative" stroke="#8b5cf6" strokeWidth={2} fill="url(#usersFill)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Referrals */}
+        <div className="bg-white rounded-xl border border-gray-100 mb-6 overflow-hidden">
+          <button
+            className="flex justify-between items-center w-full p-5 text-left"
+            onClick={() => toggleSection('referrals')}
+          >
+            <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide flex items-center gap-2">
+              <Link2 className="w-4 h-4 text-[#c9b655]" />
+              Referrals
+            </h2>
+            <div className="flex items-center gap-3">
+              {!expandedSections.referrals && referralStats.referralsCompleted > 0 && (
+                <span className="text-xs text-gray-400">{referralStats.referralsCompleted} completed &middot; {referralStats.conversionRate}% rate</span>
+              )}
+              {expandedSections.referrals ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+            </div>
+          </button>
+          {expandedSections.referrals && (
+            <div className="border-t border-gray-100 p-5 space-y-5">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <MiniStat label="Codes Created" value={referralStats.codesGenerated} />
+                <MiniStat label="Completed" value={referralStats.referralsCompleted} />
+                <MiniStat label="Conversion" value={`${referralStats.conversionRate}%`} />
+                <MiniStat label="Credits" value={referralStats.creditsGranted} sub={`${referralStats.creditsConsumed} used`} />
+              </div>
+
+              {recentReferrals.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-left">
+                        <th className="py-2 pr-3 text-xs text-gray-400 font-medium uppercase tracking-wide">Inviter</th>
+                        <th className="py-2 pr-3 text-xs text-gray-400 font-medium uppercase tracking-wide">Invitee</th>
+                        <th className="py-2 pr-3 text-xs text-gray-400 font-medium uppercase tracking-wide">Code</th>
+                        <th className="py-2 pr-3 text-xs text-gray-400 font-medium uppercase tracking-wide">Status</th>
+                        <th className="py-2 text-xs text-gray-400 font-medium uppercase tracking-wide">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentReferrals.map((r: any) => (
+                        <tr key={r.id} className="border-b border-gray-50">
+                          <td className="py-2.5 pr-3 text-gray-700">{r.inviter?.email || "—"}</td>
+                          <td className="py-2.5 pr-3 text-gray-700">{r.invitee?.email || "—"}</td>
+                          <td className="py-2.5 pr-3">
+                            <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded font-mono">{r.invite_code}</code>
+                          </td>
+                          <td className="py-2.5 pr-3">
+                            <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                              r.status === "completed" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                            }`}>
+                              {r.status === "completed" ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                              {r.status}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-gray-400 text-xs">{new Date(r.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
       </div>
     </div>
@@ -598,103 +555,32 @@ const processUserGrowthData = (usersData: any[]) => {
 
 export default Dashboard;
 
-// ✅ Reusable Components
-const StatCard = ({ title, value, icon, color }: any) => (
-  <div className="bg-white p-5 rounded-xl shadow flex justify-between items-center transition-transform hover:scale-[1.02]">
+/* ─── Reusable Components ─── */
+
+const KPICard = ({ label, value, icon, accent, sub }: { label: string; value: string | number; icon: React.ReactNode; accent: string; sub?: string }) => (
+  <div className="bg-white rounded-xl border border-gray-100 p-5 flex justify-between items-start hover:border-gray-200 transition-colors">
     <div>
-      <p className="text-[10px] uppercase tracking-widest text-gray-500">{title}</p>
-      <p className="text-3xl font-light text-gray-900 mt-1">{value}</p>
+      <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400">{label}</p>
+      <p className="text-3xl font-light text-gray-900 mt-1 tracking-tight">{value}</p>
+      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
     </div>
-    <div className={`w-12 h-12 ${color} rounded-full flex items-center justify-center text-white`}>
+    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${accent}`}>
       {icon}
     </div>
   </div>
 );
 
-const MetricCard = ({ title, value, description, trend, trendValue, icon }: any) => (
-  <div className="bg-gray-50 p-5 rounded-lg border border-gray-100">
-    <p className="text-[10px] uppercase tracking-widest text-gray-500">{title}</p>
-    <p className="text-3xl font-light text-gray-900 mt-1">{value}</p>
-    <div className="flex items-center mt-2">
-      <div className={`flex items-center ${trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-        {icon}
-        <span className="text-sm ml-1">{trendValue}</span>
-      </div>
-      <span className="text-sm text-gray-400 ml-2">from last month</span>
-    </div>
-    <p className="text-sm text-gray-400 mt-2">{description}</p>
+const MiniStat = ({ label, value, sub }: { label: string; value: string | number; sub?: string }) => (
+  <div className="bg-gray-50/80 rounded-lg p-3">
+    <p className="text-[10px] uppercase tracking-[0.15em] text-gray-400">{label}</p>
+    <p className="text-xl font-light text-gray-900 mt-0.5">{value}</p>
+    {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
   </div>
 );
 
-const SafeImage = ({ src, alt, className }: { src: string, alt: string, className: string }) => {
-  const isExternal = src.startsWith('http');
-  
-  if (isExternal) {
-    return (
-      <img 
-        src={src} 
-        alt={alt} 
-        className={`${className} w-full h-full object-cover`} 
-        onError={(e) => {
-          e.currentTarget.src = '/placeholder-image.jpg';
-        }}
-      />
-    );
-  }
-  
-  return (
-    <Image
-      src={src}
-      alt={alt}
-      fill
-      className={className}
-    />
-  );
-};
-
-const BestSellerRow = ({
-  title,
-  image,
-  price,
-  salesCount,
-  revenue
-}: any) => (
-  <div className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors">
-    <div className="relative w-14 h-14 flex-shrink-0">
-      <SafeImage
-        src={image}
-        alt={title}
-        className="object-cover rounded-md"
-      />
-    </div>
-    <div className="flex-1 min-w-0">
-      <div className="flex justify-between items-start">
-        <h4 className="font-medium text-gray-900 truncate text-base">{title}</h4>
-        <span className="text-sm font-semibold text-green-600 ml-2">${price}</span>
-      </div>
-      <div className="flex items-center gap-2 mt-1">
-        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{salesCount} sold</span>
-        <span className="text-xs text-gray-400">·</span>
-        <span className="text-xs text-gray-500">${(revenue || 0).toFixed(2)} revenue</span>
-      </div>
-    </div>
-  </div>
-);
-
-const ActivityRow = ({ icon, message, sub, time, tag }: any) => (
-  <div className="flex justify-between items-start">
-    <div className="flex items-start gap-3">
-      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-[#e6d281]">
-        {icon}
-      </div>
-      <div>
-        <p className="font-medium text-gray-800 text-base">{message}</p>
-        <p className="text-gray-400 text-sm">{sub}</p>
-      </div>
-    </div>
-    <div className="text-right text-sm text-gray-400">
-      <p>{time}</p>
-      <p className="font-semibold text-[#e6d281]">{tag}</p>
-    </div>
+const RarityPill = ({ label, count, color }: { label: string; count: number; color: string }) => (
+  <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm flex-1 ${color}`}>
+    <span className="font-medium">{count}</span>
+    <span className="text-xs opacity-70">{label}</span>
   </div>
 );
