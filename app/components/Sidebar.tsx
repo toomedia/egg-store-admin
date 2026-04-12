@@ -1,7 +1,6 @@
 'use client';
 import { useState } from "react";
 import Link from "next/link";
-
 import Image from "next/image";
 import {
   LayoutDashboard,
@@ -36,6 +35,8 @@ export default function Sidebar() {
     );
   };
 
+
+  
   const handleLogout = () => {
     localStorage.clear();
     sessionStorage.clear();
