@@ -278,7 +278,7 @@ export default function OwnershipPage() {
         <div className="card p-4 sm:p-5 mb-6">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-4 items-center">
             <div className="relative">
-              <span className="absolute inset-y-0 left-3 flex items-center text-gray-400">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
                 <Search size={16} />
               </span>
               <input
@@ -290,7 +290,7 @@ export default function OwnershipPage() {
                   updateQueryParams({ q: nextValue });
                 }}
                 placeholder="Search preset name or owner email"
-                className="ifield pl-10"
+                className="ifield ifield-with-icon h-12 pr-4 text-sm leading-5"
               />
             </div>
 

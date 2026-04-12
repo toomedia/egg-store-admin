@@ -61,6 +61,10 @@ body {
   color: #9ca3af;
 }
 
+.ifield-with-icon {
+  padding-left: 44px;
+}
+
 .card {
   background: #fff;
   border: 1px solid #e5e7eb;
