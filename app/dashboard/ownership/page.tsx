@@ -5,8 +5,10 @@ import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../../utils/supabaseClient";
 import {
+  ArrowLeft,
   Calendar,
   Loader2,
+  Mail,
   RefreshCw,
   Search,
   UserRound,
@@ -110,6 +112,33 @@ function Thumbnail({ src, alt }: { src?: string | null; alt: string }) {
   );
 }
 
+function PreviewGrid({
+  images,
+  alt,
+  compact = false,
+}: {
+  images?: string[] | null;
+  alt: string;
+  compact?: boolean;
+}) {
+  const previewImages = (images && images.length > 0 ? images : ["/placeholder.png"]).slice(
+    0,
+    compact ? 4 : 12
+  );
+
+  return (
+    <div className={compact ? "grid grid-cols-2 gap-2 w-[124px]" : "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3"}>
+      {previewImages.map((image, index) => (
+        <Thumbnail
+          key={`${image}-${index}`}
+          src={image}
+          alt={`${alt} preview ${index + 1}`}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function OwnershipPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -121,6 +150,7 @@ export default function OwnershipPage() {
   );
   const [presets, setPresets] = useState<OwnershipPreset[]>([]);
   const [filteredOwnedPresets, setFilteredOwnedPresets] = useState<OwnershipPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -232,6 +262,71 @@ export default function OwnershipPage() {
     return claimTime >= Date.now() - 7 * 24 * 60 * 60 * 1000;
   }).length;
   const stillAvailable = presets.filter(isAvailablePreset).length;
+  const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) || null;
+
+  if (selectedPreset) {
+    return (
+      <div className="pp">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 md:py-10">
+          <button
+            type="button"
+            onClick={() => setSelectedPresetId(null)}
+            className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-amber-900 transition-colors mb-8"
+          >
+            <ArrowLeft size={15} />
+            Back to ownership
+          </button>
+
+          <div className="card p-6 md:p-8">
+            <div className="flex flex-col xl:flex-row gap-8">
+              <div className="xl:w-[34rem] shrink-0">
+                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-4">Preview</p>
+                <PreviewGrid
+                  images={selectedPreset.preset_images}
+                  alt={getPresetName(selectedPreset)}
+                />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <h1 className="text-3xl font-semibold text-gray-900">
+                    {getPresetName(selectedPreset)}
+                  </h1>
+                  <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                    Owned
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm text-gray-600 mb-6">
+                  <span className="inline-flex items-center gap-2">
+                    <Calendar size={16} className="text-gray-400" />
+                    {formatClaimedDate(getClaimedAt(selectedPreset))}
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <UserRound size={16} className="text-gray-400" />
+                    {selectedPreset.owner?.name || "Unknown owner"}
+                  </span>
+                  <span className="inline-flex items-center gap-2 break-all">
+                    <Mail size={16} className="text-gray-400 shrink-0" />
+                    {selectedPreset.owner?.email || "No email"}
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-800">
+                  <p className="text-sm font-medium">
+                    Owned by {selectedPreset.owner?.name || "Unknown owner"}
+                  </p>
+                  <p className="text-sm mt-1 break-all">
+                    {selectedPreset.owner?.email || "No email"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pp">
@@ -362,7 +457,7 @@ export default function OwnershipPage() {
                 <table className="min-w-full text-left text-sm text-gray-600">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr className="text-xs uppercase tracking-wider text-gray-500">
-                      <th className="px-5 py-4">Preset</th>
+                      <th className="px-5 py-4">Preview</th>
                       <th className="px-5 py-4">Name</th>
                       <th className="px-5 py-4">Owner</th>
                       <th className="px-5 py-4">Owner Email</th>
@@ -372,12 +467,21 @@ export default function OwnershipPage() {
                   </thead>
                   <tbody>
                     {filteredOwnedPresets.map((preset) => (
-                      <tr key={preset.id} className="border-b border-gray-100 last:border-b-0">
+                      <tr
+                        key={preset.id}
+                        onClick={() => setSelectedPresetId(preset.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedPresetId(preset.id);
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        className="border-b border-gray-100 last:border-b-0 cursor-pointer hover:bg-amber-50/40 focus:outline-none focus:bg-amber-50/40"
+                      >
                         <td className="px-5 py-4">
-                          <Thumbnail
-                            src={preset.preset_images?.[0]}
-                            alt={getPresetName(preset)}
-                          />
+                          <Thumbnail src={preset.preset_images?.[0]} alt={getPresetName(preset)} />
                         </td>
                         <td className="px-5 py-4 font-medium text-gray-900">
                           {getPresetName(preset)}
@@ -409,8 +513,13 @@ export default function OwnershipPage() {
 
             <div className="md:hidden space-y-3">
               {filteredOwnedPresets.map((preset) => (
-                <div key={preset.id} className="card p-4">
-                  <div className="flex gap-4">
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setSelectedPresetId(preset.id)}
+                  className="card p-4 w-full text-left"
+                >
+                  <div className="space-y-4">
                     <Thumbnail src={preset.preset_images?.[0]} alt={getPresetName(preset)} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
@@ -432,7 +541,7 @@ export default function OwnershipPage() {
                       </p>
                     </div>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </>
