@@ -181,18 +181,28 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 // Modal Components
-const ApprovalModal = ({ 
-  isOpen, 
-  onClose, 
-  onApprove, 
-  presetName 
-}: { 
+const ApprovalModal = ({
+  isOpen,
+  onClose,
+  onApprove,
+  presetName,
+  englishTitle,
+}: {
   isOpen: boolean;
   onClose: () => void;
   onApprove: (data: { germanTitle: string }) => void;
   presetName: string;
+  englishTitle: string;
 }) => {
-  const [germanTitle, setGermanTitle] = useState('');
+  const [germanTitle, setGermanTitle] = useState(englishTitle);
+
+  // Pre-fill with the English title every time the modal opens so admins don't
+  // have to retype it — they can edit if they want a proper German translation.
+  useEffect(() => {
+    if (isOpen) {
+      setGermanTitle(englishTitle);
+    }
+  }, [isOpen, englishTitle]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -459,10 +469,11 @@ const Page = () => {
   const [userInfo, setUserInfo] = useState<{ [key: string]: UserInfo }>({});
   
   // Modal states
-  const [approvalModal, setApprovalModal] = useState<{ isOpen: boolean; presetId: string; presetName: string }>({
+  const [approvalModal, setApprovalModal] = useState<{ isOpen: boolean; presetId: string; presetName: string; englishTitle: string }>({
     isOpen: false,
     presetId: '',
-    presetName: ''
+    presetName: '',
+    englishTitle: ''
   });
   const [imageLightbox, setImageLightbox] = useState<{ images: string[]; index: number } | null>(null);
 
@@ -804,7 +815,7 @@ const Page = () => {
       alert("Error approving preset. Please try again.");
     } finally {
       setIsLoading(false);
-      setApprovalModal({ isOpen: false, presetId: '', presetName: '' });
+      setApprovalModal({ isOpen: false, presetId: '', presetName: '', englishTitle: '' });
     }
   };
 
@@ -904,12 +915,14 @@ const Page = () => {
     }
   };
 
-  // Open approval modal
-  const openApprovalModal = (presetId: string, presetName: string) => {
+  // Open approval modal. `englishTitle` is used to pre-fill the German title field
+  // so admins can approve with a default (they can still edit it if needed).
+  const openApprovalModal = (presetId: string, presetName: string, englishTitle: string) => {
     setApprovalModal({
       isOpen: true,
       presetId,
-      presetName
+      presetName,
+      englishTitle
     });
   };
 
@@ -1480,9 +1493,10 @@ const Page = () => {
     <div className="pp">
       <ApprovalModal
         isOpen={approvalModal.isOpen}
-        onClose={() => setApprovalModal({ isOpen: false, presetId: '', presetName: '' })}
+        onClose={() => setApprovalModal({ isOpen: false, presetId: '', presetName: '', englishTitle: '' })}
         onApprove={handleApprovePreset}
         presetName={approvalModal.presetName}
+        englishTitle={approvalModal.englishTitle}
       />
 
       <RejectionModal
@@ -1598,7 +1612,7 @@ const Page = () => {
                       <>
                         <button
                           type="button"
-                          onClick={() => openApprovalModal(item.id, item.preset_name?.en_name || 'Untitled')}
+                          onClick={() => openApprovalModal(item.id, item.preset_name?.en_name || 'Untitled', item.preset_name?.en_name || '')}
                           disabled={isLoading}
                           className="flex-1 xl:flex-none justify-center px-4 py-2.5 rounded-xl border border-emerald-200 text-emerald-900 text-sm font-medium bg-emerald-50/50 hover:bg-emerald-50 disabled:opacity-40 inline-flex items-center gap-2"
                         >
