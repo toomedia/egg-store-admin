@@ -18,7 +18,6 @@ import {
   Box,
   BarChart3,
   Plus,
-  Eye,
   AlertTriangle,
   TrendingUp,
   DollarSign,
@@ -325,12 +324,12 @@ const Dashboard = () => {
               <RefreshCw className="w-3.5 h-3.5" />
               Refresh
             </button>
-            <Link href="/dashboard/orders">
+            {/* <Link href="/dashboard/orders">
               <button className="flex items-center gap-2 px-3.5 py-2 text-gray-600 rounded-lg border border-gray-200 hover:bg-white hover:border-gray-300 text-sm transition-all">
                 <Eye className="w-3.5 h-3.5" />
                 Orders
               </button>
-            </Link>
+            </Link> */}
             <Link href="/dashboard/presets">
               <button className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-sm transition-all">
                 <Plus className="w-3.5 h-3.5" />
