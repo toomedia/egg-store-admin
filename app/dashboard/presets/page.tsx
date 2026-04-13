@@ -406,6 +406,19 @@ const Page = () => {
                 placeholder="e.g. Tropical Birds" className="ifield" />
             </div>
             <div>
+              <label className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">Size</label>
+              <select
+                value={formData.size.value}
+                onChange={e => setFormData(p => ({ ...p, size: { value: e.target.value, price: sizes.find(s => s.value === parseInt(e.target.value))?.price || 0 } }))}
+                className="ifield"
+              >
+                <option value="">Select size</option>
+                {sizes.map(s => (
+                  <option key={s.value} value={s.value}>Size {s.value} (€{s.price.toFixed(2)})</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="block text-[10px] uppercase tracking-widest text-gray-600 mb-2">
                 Images
                 {req > 0 && <span className={`ml-2 normal-case ${active.length === req ? 'text-emerald-400' : 'text-amber-400'}`}>{active.length}/{req}</span>}
