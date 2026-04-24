@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bell, Search, X } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { supabase } from '../../utils/supabaseClient';
 
 const Topbar: React.FC = () => {
   const router = useRouter();
@@ -18,12 +19,41 @@ const Topbar: React.FC = () => {
     setSearchQuery(query);
   }, [searchParams]);
 
-  // Load user info from localStorage
+  // Load user info from Supabase session
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('userData');
-      if (raw) setUserInfo(JSON.parse(raw));
-    } catch {}
+    let active = true;
+
+    const loadUser = async (userId: string, email: string | undefined) => {
+      const { data } = await supabase
+        .from('users')
+        .select('email, name')
+        .eq('id', userId)
+        .maybeSingle();
+      if (!active) return;
+      setUserInfo({
+        email: data?.email || email,
+        username: (data as { name?: string } | null)?.name || undefined,
+      });
+    };
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active || !data.session) return;
+      loadUser(data.session.user.id, data.session.user.email);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      if (!session) {
+        setUserInfo(null);
+        return;
+      }
+      loadUser(session.user.id, session.user.email);
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   // Debounced search function

@@ -2,20 +2,28 @@ const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
+const { verifyAdmin } = require('./admin-auth');
 
 const app = express();
-const PORT = 8000;
+const PORT = Number(process.env.PORT || process.env.RESPONSE_EMAIL_API_PORT || 8000);
 
 const env = {
-  SUPABASE_URL: 'https://puqhpgsbyvthttfhbmru.supabase.co',
-  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1cWhwZ3NieXZ0aHR0ZmhibXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ4NjQ4MjAsImV4cCI6MjA3MDQ0MDgyMH0.6vatjsBk3ZkvoYRvAwbm8Ogb3ZacJm9bL6dqTX_cckY',
-  EMAIL_HOST: 'smtp.protonmail.ch',
-  EMAIL_PORT: 587,
-  EMAIL_USER: 'play@eggception.club',
-  EMAIL_PASS: 'N427C3NWS8RE5PXP',
-  EMAIL_FROM: 'play@eggception.club',
-  ADMIN_DASHBOARD_URL: 'https://egg-store-admin.vercel.app/dashboard/presets'
+  SUPABASE_URL: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
+  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  EMAIL_HOST: process.env.EMAIL_HOST || 'smtp.protonmail.ch',
+  EMAIL_PORT: Number(process.env.EMAIL_PORT || 587),
+  EMAIL_USER: process.env.EMAIL_USER,
+  EMAIL_PASS: process.env.EMAIL_PASS,
+  EMAIL_FROM: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+  ADMIN_DASHBOARD_URL: process.env.ADMIN_DASHBOARD_URL || 'https://egg-store-admin.vercel.app/dashboard/presets',
 };
+
+if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+  throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY env vars are required');
+}
+if (!env.EMAIL_USER || !env.EMAIL_PASS) {
+  throw new Error('EMAIL_USER and EMAIL_PASS env vars are required');
+}
 
 // Initialize Supabase client
 const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
@@ -51,7 +59,7 @@ app.use(cors({
 app.use(express.json());
 
 // Send response email to user
-app.post('/api/responseemail', async (req, res) => {
+app.post('/api/responseemail', verifyAdmin, async (req, res) => {
   try {
     console.log('📧 Received email request:', req.body);
     
