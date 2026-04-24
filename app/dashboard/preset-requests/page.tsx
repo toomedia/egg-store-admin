@@ -743,13 +743,22 @@ const Page = () => {
       if (creatorEmail && creatorEmail !== 'Email not available' && creatorEmail !== 'Error loading email' && creatorEmail !== 'Loading email...') {
         try {
           console.log("Attempting to send email to:", creatorEmail);
-          
+
           const presetImages = presetToUpdate.preset_images || [];
-          
-          const response = await fetch('https://egg-store-admin.vercel.app/api/responseemail', {
+          const responseEmailUrl = process.env.NEXT_PUBLIC_RESPONSE_EMAIL_API_URL || 'https://egg-store-admin.vercel.app';
+          const { data: sessionData } = await supabase.auth.getSession();
+          const accessToken = sessionData.session?.access_token;
+
+          if (!accessToken) {
+            console.log("❌ No session available; skipping approval email");
+            throw new Error('Session expired');
+          }
+
+          const response = await fetch(`${responseEmailUrl}/api/responseemail`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify({
               action: 'approve',
@@ -767,7 +776,7 @@ const Page = () => {
           }
 
           const result = await response.json();
-          
+
           if (result.success) {
             console.log("✅ Email sent successfully to:", creatorEmail);
           } else {
@@ -848,13 +857,22 @@ const Page = () => {
       if (creatorEmail && creatorEmail !== 'Email not available' && creatorEmail !== 'Error loading email' && creatorEmail !== 'Loading email...') {
         try {
           console.log("Attempting to send rejection email to:", creatorEmail);
-          
+
           const presetImages = presetToUpdate.preset_images || [];
-          
-          const response = await fetch('https://egg-store-admin.vercel.app/api/responseemail', {
+          const responseEmailUrl = process.env.NEXT_PUBLIC_RESPONSE_EMAIL_API_URL || 'https://egg-store-admin.vercel.app';
+          const { data: sessionData } = await supabase.auth.getSession();
+          const accessToken = sessionData.session?.access_token;
+
+          if (!accessToken) {
+            console.log("❌ No session available; skipping rejection email");
+            throw new Error('Session expired');
+          }
+
+          const response = await fetch(`${responseEmailUrl}/api/responseemail`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify({
               action: 'reject',
@@ -870,7 +888,7 @@ const Page = () => {
           }
 
           const result = await response.json();
-          
+
           if (result.success) {
             console.log("✅ Rejection email sent successfully to:", creatorEmail);
           } else {

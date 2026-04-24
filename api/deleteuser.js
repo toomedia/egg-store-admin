@@ -1,15 +1,20 @@
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
+const { verifyAdmin } = require('./admin-auth');
 
 const app = express();
 const PORT = Number(process.env.PORT || process.env.DELETE_USER_API_PORT || 8001);
 
 const env = {
-  SUPABASE_URL: 'https://puqhpgsbyvthttfhbmru.supabase.co',
-  SUPABASE_ANON_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1cWhwZ3NieXZ0aHR0ZmhibXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ4NjQ4MjAsImV4cCI6MjA3MDQ0MDgyMH0.6vatjsBk3ZkvoYRvAwbm8Ogb3ZacJm9bL6dqTX_cckY',
-  SUPABASE_SERVICE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1cWhwZ3NieXZ0aHR0ZmhibXJ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDg2NDgyMCwiZXhwIjoyMDcwNDQwODIwfQ.lqxFplwp3XQZQK0z6TOTrtnrzALwMcQz-cxdO9QUadY',
+  SUPABASE_URL: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
+  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY,
 };
+
+if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) {
+  throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars are required');
+}
 
 const decodeJwtPayload = (token) => {
   try {
@@ -51,10 +56,17 @@ app.use(
 );
 app.use(express.json());
 
-app.post('/api/deleteuser', async (req, res) => {
+app.post('/api/deleteuser', verifyAdmin, async (req, res) => {
   const { userId, email } = req.body || {};
 
-  console.log('[deleteuser] request received', { userId, email });
+  console.log('[deleteuser] request received', { userId, email, by: req.user?.id });
+
+  if (req.user?.id === userId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Admins cannot delete their own account through this endpoint',
+    });
+  }
 
   if (!userId || typeof userId !== 'string') {
     return res.status(400).json({
@@ -84,7 +96,7 @@ app.post('/api/deleteuser', async (req, res) => {
         return res.status(500).json({
           success: false,
           message:
-            'Supabase service role key is invalid for Auth admin operations. Replace SUPABASE_SERVICE_KEY in api/deleteuser.js with the real service_role key from this Supabase project.',
+            'Supabase service role key is invalid for Auth admin operations. Check SUPABASE_SERVICE_ROLE_KEY in the environment.',
         });
       }
 

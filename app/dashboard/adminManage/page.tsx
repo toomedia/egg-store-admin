@@ -1,7 +1,6 @@
 "use client"
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from "../../../utils/supabaseClient";
-import { createClient } from '@supabase/supabase-js';
 import {
   Users,
   UserPlus,
@@ -51,7 +50,7 @@ const AdminManager = () => {
   const [inviteRole, setInviteRole] = useState('admin');
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
-  const deleteUserApiBaseUrl = 'https://egg-store-admin.vercel.app'
+  const deleteUserApiBaseUrl = process.env.NEXT_PUBLIC_DELETE_USER_API_URL || 'https://egg-store-admin.vercel.app'
   
   const itemsPerPage = 10;
   const roles = ['admin'];
@@ -59,12 +58,6 @@ const AdminManager = () => {
   // IndexedDB constants
   const DB_NAME = 'egg-store-db';
   const STORE_NAME = 'users';
-
-  // Supabase admin client with service role key (bypasses RLS)
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL  || 'https://puqhpgsbyvthttfhbmru.supabase.co',
-    process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1cWhwZ3NieXZ0aHR0ZmhibXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ4NjQ4MjAsImV4cCI6MjA3MDQ0MDgyMH0.6vatjsBk3ZkvoYRvAwbm8Ogb3ZacJm9bL6dqTX_cckY'
-  );
 
   useEffect(() => {
     const fetchAllUsers = async () => {
@@ -261,11 +254,10 @@ const AdminManager = () => {
       // Set isAdmin based on role
       const isAdmin = newRole === 'admin';
       
-      // Use update to modify isAdmin column
-      const { error } = await supabaseAdmin
-        .from('users')
-        .update({ isAdmin: isAdmin })
-        .eq('id', userId);
+      const { error } = await supabase.rpc('admin_set_user_admin', {
+        target_user_id: userId,
+        is_admin: isAdmin,
+      });
         
       if (error) {
         throw new Error(error.message);
@@ -288,10 +280,18 @@ const AdminManager = () => {
     }
     
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        showNotification('error', 'Session expired. Please sign in again.');
+        return;
+      }
+
       const response = await fetch(`${deleteUserApiBaseUrl}/api/deleteuser`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ userId, email }),
       });
@@ -303,7 +303,7 @@ const AdminManager = () => {
       }
 
       showNotification('success', 'User deleted successfully');
-      
+
       setUsers(prev => prev.filter(user => user.id !== userId));
       setSelectedUsers(prev => prev.filter(id => id !== userId));
     } catch (error: any) {
@@ -315,11 +315,18 @@ const AdminManager = () => {
     if (!confirm(`Are you sure you want to delete ${selectedUsers.length} users?`)) {
       return;
     }
-    
+
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        showNotification('error', 'Session expired. Please sign in again.');
+        return;
+      }
+
       let successCount = 0;
       let errorCount = 0;
-      
+
       for (const userId of selectedUsers) {
         try {
           const selectedUser = users.find((user) => user.id === userId);
@@ -327,6 +334,7 @@ const AdminManager = () => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify({ userId, email: selectedUser?.email }),
           });
