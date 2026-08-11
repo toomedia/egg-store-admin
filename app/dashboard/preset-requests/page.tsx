@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import {supabase} from "../../../utils/supabaseClient"
+import { adminFetch } from "../../../utils/adminFetch";
 import {
   ArrowLeft,
   PlusCircle,
@@ -486,25 +487,13 @@ const Page = () => {
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
   const handleRegenerate = async (presetId: string, presetName: string) => {
-    const env = (globalThis as any).process?.env ?? {};
-    const apiUrl = "https://all-about-eggs-git-feature-preset-minting-toomedias-projects.vercel.app"
-    const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
-    if (!apiUrl || !adminKey) {
-      alert('Regeneration API not configured. Check NEXT_PUBLIC_AUTO_GENERATE_API_URL and NEXT_PUBLIC_ADMIN_SECRET_KEY.');
-      return;
-    }
     if (!confirm(`Regenerate a new version of "${presetName}"? This will use OpenAI credits and create a new pending preset for review.`)) return;
 
     setRegeneratingId(presetId);
     try {
-      const res = await fetch(`${apiUrl}/api/regenerate-preset`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({ preset_id: presetId }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        alert(data.error || 'Regeneration failed. Check if this preset has saved prompts.');
+      const { ok, data, error } = await adminFetch('/api/admin/regenerate-preset', { preset_id: presetId });
+      if (!ok) {
+        alert(error || 'Regeneration failed. Check if this preset has saved prompts.');
       } else {
         alert(`New version "${data.name}" created with ${data.imageCount} eggs. Check Pending Approvals.`);
         const { data: updatedData } = await supabase.from('presets').select('*').order('created_at', { ascending: false });

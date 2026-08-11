@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from "../../../utils/supabaseClient";
-import { getAutoGenerateApiOrigin } from "../../../utils/autoGenerateApi";
+import { adminFetch } from "../../../utils/adminFetch";
 import {
   ArrowLeft, PlusCircle, Image as ImageIcon, Calendar,
   Edit, Trash2, X, CheckCircle, XCircle, Clock,
@@ -204,18 +204,11 @@ const Page = () => {
 
 
   const handleRegenerate = async (presetId: string, presetName: string) => {
-    const apiOrigin = getAutoGenerateApiOrigin();
-    const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
-    if (!apiOrigin || !adminKey) { alert('Regeneration API not configured.'); return; }
     if (!confirm(`Regenerate a new version of "${presetName}"? This uses OpenAI credits and creates a new preset for review.`)) return;
     setRegeneratingId(presetId);
     try {
-      const res = await fetch(`${apiOrigin}/api/regenerate-preset`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({ preset_id: presetId }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) alert(data.error || 'Regeneration failed. Make sure this preset has saved prompts (run Backfill first).');
+      const { ok, data, error } = await adminFetch('/api/admin/regenerate-preset', { preset_id: presetId });
+      if (!ok) alert(error || 'Regeneration failed. Make sure this preset has saved prompts (run Backfill first).');
       else alert(`New version "${data.name}" created with ${data.imageCount} eggs. Check Preset Requests for review.`);
     } catch (e: any) { alert(e.message || 'Regeneration failed.'); }
     finally { setRegeneratingId(null); }
@@ -227,26 +220,15 @@ const Page = () => {
   const handleBackfill = async (opts: { presetId: string; presetName?: string }) => {
     const { presetId } = opts;
     const label = opts.presetName?.trim() || 'this preset';
-    const apiOrigin = getAutoGenerateApiOrigin();
-    const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
 
-    if (!apiOrigin || !adminKey) {
-      setBackfillRowFeedback({ id: presetId, success: false, message: 'API not configured.' });
-      return;
-    }
     if (!confirm(`Backfill vision prompts for “${label}”? Uses OpenAI credits.`)) return;
 
     setBackfillRowFeedback(null);
     setBackfillBusy(presetId);
     try {
-      const res = await fetch(`${apiOrigin}/api/backfill-preset-prompts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({ presetId }),
-      });
-      const data = await res.json();
-      const errMsg = data.error || 'Backfill failed.';
-      if (!res.ok || !data.success) {
+      const { ok: requestOk, data, error } = await adminFetch('/api/admin/backfill-preset-prompts', { presetId });
+      const errMsg = error || 'Backfill failed.';
+      if (!requestOk) {
         setBackfillRowFeedback({ id: presetId, success: false, message: errMsg });
         return;
       }
@@ -272,18 +254,13 @@ const Page = () => {
   };
 
   const handleAutoGenerate = async () => {
-    const apiOrigin = getAutoGenerateApiOrigin();
-    const adminKey = process.env.NEXT_PUBLIC_ADMIN_SECRET_KEY;
-
-    if (!apiOrigin || !adminKey) { setGenResult({ success: false, message: 'API not configured.' }); return; }
     setAutoGenerating(true); setGenResult(null);
     try {
-      const res = await fetch(`${apiOrigin}/api/auto-generate-preset`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
-        body: JSON.stringify({ concept: genForm.concept || undefined, name: genForm.name || undefined, count: 12 }),
+      // Die Bildanzahl legt die Server-Route fest — sie kostet Guthaben.
+      const { ok, data, error } = await adminFetch('/api/admin/auto-generate-preset', {
+        concept: genForm.concept || undefined, name: genForm.name || undefined,
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) setGenResult({ success: false, message: data.error || 'Failed' });
+      if (!ok) setGenResult({ success: false, message: error || 'Failed' });
       else { setGenResult({ success: true, message: `"${data.name}" created with ${data.imageCount} eggs.` }); setGenForm({ concept: '', name: '' }); }
     } catch (e: any) { setGenResult({ success: false, message: e.message }); }
     finally { setAutoGenerating(false); }
