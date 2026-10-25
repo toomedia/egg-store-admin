@@ -36,7 +36,10 @@ const verifyAdmin = async (req, res, next) => {
       });
     }
 
-    const reader = serviceClient || authClient;
+    const reader = serviceClient || createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
     const { data: userRow, error: userError } = await reader
       .from('users')
       .select('isAdmin')
